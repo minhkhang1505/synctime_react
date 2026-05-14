@@ -4,6 +4,7 @@ import { createGroup } from '../api/groups-api';
 import { useUIStore } from '../../../store/useUIStore';
 import { Loader2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 export function CreateGroupModal() {
   const { isCreateGroupOpen, setCreateGroupOpen } = useUIStore();
@@ -20,7 +21,7 @@ export function CreateGroupModal() {
       navigate(`/groups/${data.id}`);
     },
     onError: (error: any) => {
-      alert(error.message || 'Failed to create group');
+      toast.error(error.message || 'Failed to create group');
     }
   });
 

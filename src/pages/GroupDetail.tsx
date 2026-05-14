@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchGroupMembers, fetchUserGroups } from '../features/groups/api/groups-api';
 import { ArrowLeft, Copy, Calendar as CalendarIcon, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 export function GroupDetail() {
   const { id } = useParams<{ id: string }>();
@@ -44,7 +45,7 @@ export function GroupDetail() {
               <button 
                 onClick={() => {
                   navigator.clipboard.writeText(group.invite_code);
-                  alert('Code copied!');
+                  toast.success('Invite code copied!');
                 }} 
                 className="p-4 md:p-6 rounded-2xl md:rounded-[24px] bg-white/5 hover:bg-white/10 text-gray-300 transition-colors border border-white/10 active:scale-95"
               >

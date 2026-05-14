@@ -5,6 +5,7 @@ import { saveAvailability } from '../features/scheduler/api/availability-api';
 import { supabase } from '../lib/supabase';
 import { ArrowLeft, Save, Loader2, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { format, addDays, startOfToday, isSameDay, startOfWeek } from 'date-fns';
+import toast from 'react-hot-toast';
 
 export function Availability() {
   const { id } = useParams<{ id: string }>();
@@ -56,7 +57,7 @@ export function Availability() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['availability', id] });
       queryClient.invalidateQueries({ queryKey: ['my_availability', id] });
-      alert('Availability saved!');
+      toast.success('Availability saved successfully!');
       navigate(`/match/${id}`);
     }
   });

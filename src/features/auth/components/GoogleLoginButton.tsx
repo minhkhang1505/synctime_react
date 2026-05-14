@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export function GoogleLoginButton() {
   const [isLoading, setIsLoading] = useState(false);
@@ -17,7 +18,7 @@ export function GoogleLoginButton() {
       if (error) throw error;
     } catch (error) {
       console.error('Error logging in:', error);
-      alert('Failed to log in with Google.');
+      toast.error('Failed to log in with Google.');
     } finally {
       setIsLoading(false);
     }

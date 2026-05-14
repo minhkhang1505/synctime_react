@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Shell } from "./components/layout/Shell";
 import { Home } from "./pages/Home";
@@ -25,6 +26,18 @@ function App() {
               <Route path="settings" element={<div className="p-4 text-center text-gray-400 mt-20">Settings coming soon</div>} />
             </Route>
           </Routes>
+          <Toaster 
+            position="top-center" 
+            toastOptions={{
+              style: {
+                background: '#1f2937',
+                color: '#fff',
+                borderRadius: '16px',
+                border: '1px solid rgba(255,255,255,0.1)',
+                boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+              },
+            }}
+          />
         </BrowserRouter>
       </AuthProvider>
     </QueryClientProvider>
