@@ -60,7 +60,7 @@ export function Match() {
   };
 
   return (
-    <div className="flex flex-col h-full animate-in fade-in duration-500 pb-10">
+    <div className="flex flex-col min-h-full animate-in fade-in duration-500 pb-10">
       <div className="flex items-center gap-4 mt-6 md:mt-2 mb-6 md:mb-10">
         <button onClick={() => navigate(-1)} className="p-2 md:p-3 rounded-xl md:rounded-2xl glass text-gray-400 hover:text-white transition-colors">
           <ArrowLeft size={20} className="md:w-6 md:h-6" />

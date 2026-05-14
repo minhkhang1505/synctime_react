@@ -1,13 +1,21 @@
-import { Users, CalendarPlus, ArrowRight, Calendar, LogOut } from "lucide-react";
+import { Users, CalendarPlus, ArrowRight, Calendar, LogOut, Coffee, Sunrise, Sun, Moon, ArrowUpRight } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { GoogleLoginButton } from "../features/auth/components/GoogleLoginButton";
 import { supabase } from "../lib/supabase";
 import { useUIStore } from "../store/useUIStore";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { fetchTodayMatches } from "../features/scheduler/api/availability-api";
 
 export function Home() {
   const { user, isInitialized } = useAuthStore();
   const { setCreateGroupOpen, setJoinGroupOpen } = useUIStore();
+
+  const { data: matches, isLoading } = useQuery({
+    queryKey: ['today_matches'],
+    queryFn: fetchTodayMatches,
+    enabled: isInitialized && !!user
+  });
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -42,7 +50,7 @@ export function Home() {
   }
 
   return (
-    <div className="flex flex-col h-full animate-in fade-in duration-700">
+    <div className="flex flex-col min-h-full animate-in fade-in duration-700">
       <div className="mt-8 md:mt-2 mb-10 md:mb-16 flex justify-between items-start">
         <div className="space-y-2">
           <h2 className="text-3xl md:text-5xl font-bold tracking-tight">
@@ -103,19 +111,59 @@ export function Home() {
         <div className="absolute -top-20 -right-20 w-64 h-64 bg-primary/20 blur-[100px] rounded-full"></div>
         <h4 className="font-semibold text-sm md:text-xl text-gray-300 mb-8 flex items-center gap-3 relative z-10">
           <span className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-primary animate-pulse"></span>
-          Quick Access
+          Today's Matches
         </h4>
-        <div className="flex flex-col md:flex-row items-center justify-center py-6 md:py-8 text-center md:text-left gap-6 md:gap-12 relative z-10">
-          <div className="w-16 h-16 md:w-24 md:h-24 rounded-2xl md:rounded-[32px] bg-white/5 flex items-center justify-center border border-white/10 shrink-0 shadow-inner">
-             <Calendar size={32} className="text-gray-400 md:w-12 md:h-12" />
+        
+        {isLoading ? (
+          <div className="flex justify-center py-10 relative z-10">
+             <div className="w-8 h-8 md:w-10 md:h-10 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
           </div>
-          <div>
-            <p className="text-sm md:text-xl text-gray-300 font-medium leading-relaxed mb-5 md:mb-6">
-              Head to Groups tab to see your teams<br className="hidden md:block"/> and start matching schedules!
+        ) : matches?.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-6 md:py-10 text-center relative z-10">
+            <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-white/5 flex items-center justify-center mb-4 md:mb-6 border border-white/10 shadow-inner">
+               <Coffee size={28} className="text-gray-500 md:w-10 md:h-10" />
+            </div>
+            <p className="text-base md:text-xl text-gray-300 font-medium leading-relaxed mb-2 md:mb-3">
+              No perfect matches today!
             </p>
-            <Link to="/groups" className="text-primary text-sm md:text-lg font-bold hover:text-white hover:bg-primary/20 px-6 py-3.5 md:px-8 md:py-4 rounded-xl md:rounded-2xl bg-primary/10 transition-all inline-block">View My Groups</Link>
+            <p className="text-sm md:text-base text-gray-500">
+              Enjoy your free time or schedule a new meetup.
+            </p>
           </div>
-        </div>
+        ) : (
+          <div className="grid gap-4 md:gap-6 relative z-10 md:grid-cols-2 xl:grid-cols-3">
+            {matches?.map((m: any, i: number) => {
+               const Icon = m.startTime === '08:00:00' ? Sunrise : m.startTime === '13:00:00' ? Sun : Moon;
+               const bgClass = m.startTime === '08:00:00' ? 'from-amber-500/20 to-orange-500/5 border-amber-500/20' : m.startTime === '13:00:00' ? 'from-blue-500/20 to-cyan-500/5 border-blue-500/20' : 'from-indigo-500/20 to-purple-500/5 border-indigo-500/20';
+               const textClass = m.startTime === '08:00:00' ? 'text-amber-400' : m.startTime === '13:00:00' ? 'text-blue-400' : 'text-indigo-400';
+               const iconBgClass = m.startTime === '08:00:00' ? 'bg-amber-500/20' : m.startTime === '13:00:00' ? 'bg-blue-500/20' : 'bg-indigo-500/20';
+
+               return (
+                 <div key={i} className={`glass p-5 md:p-8 rounded-3xl md:rounded-[32px] border flex flex-col transition-all hover:scale-[1.02] bg-gradient-to-br ${bgClass} shadow-xl relative overflow-hidden`}>
+                   <div className="flex items-center justify-between mb-6 md:mb-8">
+                     <div className={`w-12 h-12 md:w-16 md:h-16 rounded-2xl md:rounded-[24px] ${iconBgClass} ${textClass} flex items-center justify-center shadow-inner`}>
+                       <Icon size={28} className="md:w-8 md:h-8" />
+                     </div>
+                     <span className={`font-black text-xl md:text-3xl tracking-tight opacity-40 ${textClass}`}>
+                       {m.timeLabel}
+                     </span>
+                   </div>
+                   
+                   <div className="space-y-2.5 md:space-y-3 mt-auto">
+                     {m.groups.map((g: any, j: number) => (
+                       <Link to={`/match/${g.id}`} key={j} className="flex items-center justify-between p-3 md:p-4 rounded-xl md:rounded-2xl bg-black/20 hover:bg-black/40 border border-white/5 transition-colors group">
+                         <span className="font-bold text-sm md:text-base text-gray-200 group-hover:text-white truncate pr-2">{g.name}</span>
+                         <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-white/5 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
+                            <ArrowUpRight size={14} className="text-gray-400 group-hover:text-primary md:w-4 md:h-4" />
+                         </div>
+                       </Link>
+                     ))}
+                   </div>
+                 </div>
+               )
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -10,8 +10,6 @@ export function Shell() {
   const navItems = [
     { icon: HomeIcon, label: "Home", path: "/" },
     { icon: Users, label: "Groups", path: "/groups" },
-    { icon: Calendar, label: "Availability", path: "/groups" }, 
-    { icon: Settings, label: "Settings", path: "/settings" },
   ];
 
   return (
@@ -58,7 +56,7 @@ export function Shell() {
 
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto p-4 md:p-10 pb-28 md:pb-10">
-          <div className="max-w-[1200px] mx-auto h-full relative">
+          <div className="max-w-[1200px] mx-auto min-h-full relative">
             <Outlet />
           </div>
         </main>
