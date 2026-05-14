@@ -95,11 +95,11 @@ export function Match() {
           <div className="w-8 h-8 md:w-12 md:h-12 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
         </div>
       ) : (
-        <div className="glass rounded-[24px] md:rounded-[40px] border border-white/5 shadow-2xl relative overflow-hidden max-w-4xl mx-auto w-full flex flex-col">
+        <div className="glass rounded-[24px] md:rounded-[40px] border border-white/5 shadow-2xl relative overflow-hidden max-w-[1200px] mx-auto w-full flex flex-col lg:flex-row">
           <div className="absolute -top-12 -right-12 md:-top-20 md:-right-20 w-40 h-40 md:w-80 md:h-80 bg-emerald-500/10 blur-[80px] rounded-full"></div>
           
-          <div className="p-4 md:p-10 flex-1">
-            <div className="flex">
+          <div className="p-4 md:p-10 flex-1 min-w-0">
+            <div className="flex lg:justify-center">
               <div className="flex flex-col justify-end gap-1.5 md:gap-4 mr-2 md:mr-6 pb-1 md:pb-2 pt-10 md:pt-16">
                 {TIME_BLOCKS.map(tb => (
                   <div key={tb.label} className="h-10 md:h-20 flex items-center justify-end">
@@ -156,25 +156,25 @@ export function Match() {
           </div>
 
           {selectedCell && (
-            <div className="bg-black/20 p-6 md:p-10 border-t border-white/5 animate-in fade-in slide-in-from-top-2">
-              <div className="flex items-center justify-between mb-4 md:mb-6">
+            <div className="bg-black/20 p-6 md:p-10 border-t lg:border-t-0 lg:border-l border-white/5 animate-in fade-in slide-in-from-top-2 lg:slide-in-from-right-8 lg:slide-in-from-top-0 lg:w-[320px] xl:w-[380px] shrink-0">
+              <div className="flex items-center justify-between mb-4 lg:mb-8">
                 <h4 className="text-[13px] md:text-lg font-bold text-primary tracking-wide">
-                  {format(new Date(selectedCell.date), 'EEEE, MMM d')} <span className="mx-2 text-white/20">•</span> {selectedCell.label}
+                  {format(new Date(selectedCell.date), 'EEE, MMM d')} <span className="mx-2 text-white/20">•</span> {selectedCell.label}
                 </h4>
-                <span className="text-xs md:text-base text-gray-400 font-bold tracking-wider">{selectedCell.userIds.size}/{totalMembers} FREE</span>
+                <span className="text-xs md:text-base text-gray-400 font-bold tracking-wider shrink-0 ml-2">{selectedCell.userIds.size}/{totalMembers} FREE</span>
               </div>
               
               {selectedCell.userIds.size === 0 ? (
-                <p className="text-sm md:text-lg text-gray-500 font-medium mt-2">No members are free at this time.</p>
+                <p className="text-sm md:text-base text-gray-500 font-medium mt-2">No members are free at this time.</p>
               ) : (
-                <div className="flex flex-wrap gap-3 md:gap-4 mt-2">
+                <div className="flex flex-wrap gap-3 md:gap-4 mt-2 lg:flex-col">
                   {(() => {
                     const freeMembers = members?.filter(m => selectedCell.userIds.has(m.user_id));
                     if (!freeMembers || freeMembers.length === 0) {
                        return <span className="text-sm text-gray-400 italic">Error matching user profiles...</span>;
                     }
                     return freeMembers.map(member => (
-                      <div key={member.user_id} className="flex items-center gap-2 md:gap-3 bg-white/5 pr-4 md:pr-5 pl-1.5 py-1.5 rounded-full border border-white/10 shadow-sm hover:bg-white/10 transition-colors">
+                      <div key={member.user_id} className="flex items-center gap-2 md:gap-3 bg-white/5 pr-4 md:pr-5 pl-1.5 py-1.5 md:py-2 rounded-full border border-white/10 shadow-sm hover:bg-white/10 transition-colors w-auto lg:w-full">
                         <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center text-[12px] md:text-sm font-bold text-white overflow-hidden shrink-0 border border-white/20">
                           {member.profiles?.avatar_url ? (
                             <img src={member.profiles.avatar_url} alt="" className="w-full h-full object-cover" />
@@ -182,7 +182,7 @@ export function Match() {
                             member.profiles?.full_name?.charAt(0)?.toUpperCase() || '?'
                           )}
                         </div>
-                        <span className="text-sm md:text-base font-bold text-gray-200">{member.profiles?.full_name?.split(' ')[0] || 'Unknown'}</span>
+                        <span className="text-sm md:text-base font-bold text-gray-200 truncate">{member.profiles?.full_name || 'Unknown'}</span>
                       </div>
                     ));
                   })()}
