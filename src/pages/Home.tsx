@@ -1,4 +1,4 @@
-import { Users, CalendarPlus, ArrowRight, Calendar, LogOut, Coffee, Sunrise, Sun, Moon, ArrowUpRight } from "lucide-react";
+import { Users, CalendarPlus, ArrowRight, LogOut, Coffee, Sunrise, Sun, Moon, ArrowUpRight } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { GoogleLoginButton } from "../features/auth/components/GoogleLoginButton";
 import { supabase } from "../lib/supabase";

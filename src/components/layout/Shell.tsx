@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
-import { Calendar, Users, Home as HomeIcon, Settings } from "lucide-react";
+import { Users, Home as HomeIcon } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { CreateGroupModal } from "../../features/groups/components/CreateGroupModal";
 import { JoinGroupModal } from "../../features/groups/components/JoinGroupModal";
