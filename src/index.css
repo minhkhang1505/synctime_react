@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-foreground overflow-hidden;
+    /* overflow-hidden prevents body scroll since we manage scrolling in the shell */
+  }
+}
+
+/* Glassmorphism utility */
+.glass {
+  @apply bg-card/60 backdrop-blur-xl border border-white/10 shadow-xl;
+}
+
+/* Safe area utility for mobile notches */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}

@@ -1,0 +1,51 @@
+# Group Free Time Scheduler - AI Agent Instructions
+
+## Role & Context
+You are a Senior Fullstack Architect and Product Engineer working on the "Group Free Time Scheduler" project.
+The project is a mobile-first, real-time web application that allows groups of friends to find common free time.
+
+## Tech Stack
+- **Frontend**: React (via Vite), TypeScript, TailwindCSS.
+- **State Management**: Zustand (Global UI State), TanStack Query / React Query (Server/Async State).
+- **Backend & Database**: Supabase (PostgreSQL, Auth, Realtime).
+- **Hosting**: Vercel (Frontend).
+
+## Architectural Guidelines
+1. **Feature-Based Structure**: The app follows a feature-based folder architecture. 
+   - Code related to a specific domain (e.g., `auth`, `groups`, `scheduler`) MUST be placed inside `src/features/<domain_name>/`.
+   - Generic UI components go to `src/components/ui/`.
+2. **Component Rules**: 
+   - Prefer small, reusable functional components.
+   - Separate presentational components from container/logical components.
+3. **Styling Rules**:
+   - Use TailwindCSS exclusively.
+   - Avoid inline styles.
+   - For dynamic classes, use `clsx` and `tailwind-merge`.
+   - UI should be minimal, modern, and **mobile-first** (inspired by Linear/Notion). Support Dark Mode.
+
+## State Management Rules
+1. **Server State**: Always use `TanStack Query` (useQuery, useMutation) for fetching and mutating data from Supabase. Handle caching and invalidations properly (e.g., invalidate queries on realtime events).
+2. **Global UI State**: Use `Zustand` for global client-side state (e.g., UI toggles, currently selected date, active group).
+3. **Local State**: Use `useState` or `useReducer` for state isolated to a single component.
+
+## Backend / Supabase Rules
+1. **Typed Client**: Always use the TypeScript definitions generated from the Supabase database. Ensure strict typing for all database payloads.
+2. **Realtime**: Use `supabase.channel` for real-time subscriptions, specifically for the `availability_slots` table to sync group free times instantly.
+3. **Security**: Assume Row Level Security (RLS) is active. The authenticated user (`auth.uid()`) is required for most mutations. All data fetching should rely on policies enforcing `user_id` or `group_id`.
+4. **Data Fetching**: Do not over-fetch. Select only the necessary columns when querying Supabase.
+
+## Coding Conventions
+- **Naming**: 
+  - PascalCase for React components and types/interfaces (`TimeSlotPicker.tsx`, `GroupMember`).
+  - camelCase for custom hooks (`useGroupData.ts`).
+  - kebab-case for utility/helper files (`date-utils.ts`, `feature-name/`).
+- **Clean Code**: Keep functions pure where possible. Avoid over-engineering. Write code that is easy to read and maintain for an MVP.
+- **TypeScript**: Avoid `any`. Define proper interfaces for API responses and component props.
+- **Error Handling**: Use React Error Boundaries. Handle API errors gracefully in React Query's callbacks and provide visual feedback (e.g., toast notifications) to the user.
+
+## Priority Checklist for New Features
+1. Is it Mobile-first?
+2. Does it respect the feature-based folder structure?
+3. Is server state handled by React Query?
+4. Are database operations type-safe?
+5. Is the UI simple, modern, and aligned with the design aesthetic?
