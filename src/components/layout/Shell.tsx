@@ -1,15 +1,23 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
-import { Users, Home as HomeIcon } from "lucide-react";
+import { Users, Home as HomeIcon, Bell } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { CreateGroupModal } from "../../features/groups/components/CreateGroupModal";
 import { JoinGroupModal } from "../../features/groups/components/JoinGroupModal";
+import { useNotificationStore } from "../../store/useNotificationStore";
+import { useNotificationListener } from "../../store/useNotificationListener";
 
 export function Shell() {
   const location = useLocation();
 
+  const { unreadCount } = useNotificationStore();
+  useNotificationListener();
+
+  const count = unreadCount();
+
   const navItems = [
     { icon: HomeIcon, label: "Home", path: "/" },
     { icon: Users, label: "Groups", path: "/groups" },
+    { icon: Bell, label: "Notifications", path: "/notifications", badge: count > 0 ? count : null },
   ];
 
   return (
@@ -31,12 +39,17 @@ export function Shell() {
                 key={item.label}
                 to={item.path}
                 className={cn(
-                  "flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300",
+                  "flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 relative",
                   isActive ? "text-primary bg-primary/10 font-bold" : "text-gray-400 hover:text-gray-200 hover:bg-white/5 font-medium"
                 )}
               >
                 <Icon size={24} strokeWidth={isActive ? 2.5 : 2} />
                 <span className="text-[16px] tracking-wide">{item.label}</span>
+                {item.badge && (
+                  <span className="absolute top-3 right-4 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.5)]">
+                    {item.badge > 99 ? '99+' : item.badge}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -75,12 +88,17 @@ export function Shell() {
                     key={item.label}
                     to={item.path}
                     className={cn(
-                      "flex flex-col items-center gap-1 p-3 rounded-full transition-all duration-300 w-16",
+                      "flex flex-col items-center gap-1 p-3 rounded-full transition-all duration-300 w-16 relative",
                       isActive ? "text-primary bg-primary/10" : "text-gray-500 hover:text-gray-300"
                     )}
                   >
                     <Icon size={22} strokeWidth={isActive ? 2.5 : 2} />
                     <span className="text-[10px] font-medium tracking-wide">{item.label}</span>
+                    {item.badge && (
+                      <span className="absolute top-1 right-2 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-lg">
+                        {item.badge > 99 ? '99+' : item.badge}
+                      </span>
+                    )}
                   </Link>
                 );
               })}

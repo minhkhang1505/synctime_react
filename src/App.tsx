@@ -7,6 +7,7 @@ import { Groups } from "./pages/Groups";
 import { GroupDetail } from "./pages/GroupDetail";
 import { Availability } from "./pages/Availability";
 import { Match } from "./pages/Match";
+import { Notifications } from "./pages/Notifications";
 import { AuthProvider } from "./features/auth/components/AuthProvider";
 
 const queryClient = new QueryClient();
@@ -23,6 +24,7 @@ function App() {
               <Route path="groups/:id" element={<GroupDetail />} />
               <Route path="availability/:id" element={<Availability />} />
               <Route path="match/:id" element={<Match />} />
+              <Route path="notifications" element={<Notifications />} />
               <Route path="settings" element={<div className="p-4 text-center text-gray-400 mt-20">Settings coming soon</div>} />
             </Route>
           </Routes>
