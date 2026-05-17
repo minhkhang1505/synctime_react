@@ -24,15 +24,28 @@ export const useNotificationStore = create<NotificationState>()(
     (set, get) => ({
       notifications: [],
       addNotification: (notification) => {
-        const newNotification: AppNotification = {
-          ...notification,
-          id: Math.random().toString(36).substring(2, 9),
-          createdAt: new Date().toISOString(),
-          read: false,
-        };
-        set((state) => ({
-          notifications: [newNotification, ...state.notifications].slice(0, 50), // keep last 50
-        }));
+        set((state) => {
+          // Prevent exact duplicate of the most recent notification
+          if (
+            state.notifications.length > 0 &&
+            state.notifications[0].title === notification.title &&
+            state.notifications[0].message === notification.message &&
+            !state.notifications[0].read
+          ) {
+            return state;
+          }
+
+          const newNotification: AppNotification = {
+            ...notification,
+            id: Math.random().toString(36).substring(2, 9),
+            createdAt: new Date().toISOString(),
+            read: false,
+          };
+          
+          return {
+            notifications: [newNotification, ...state.notifications].slice(0, 50), // keep last 50
+          };
+        });
       },
       markAsRead: (id) =>
         set((state) => ({

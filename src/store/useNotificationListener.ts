@@ -1,17 +1,36 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useNotificationStore } from './useNotificationStore';
 import toast from 'react-hot-toast';
 
+// Debounce map outside the component so it persists across re-renders
+const pendingNotifications = new Map<string, ReturnType<typeof setTimeout>>();
+
 export function useNotificationListener() {
   const { addNotification } = useNotificationStore();
+  const mounted = useRef(true);
 
   useEffect(() => {
-    let mounted = true;
+    mounted.current = true;
+
+    const fetchDetails = async (userId: string, groupId: string) => {
+      try {
+        const [{ data: profile }, { data: group }] = await Promise.all([
+          supabase.from('profiles').select('full_name').eq('id', userId).single(),
+          supabase.from('groups').select('name').eq('id', groupId).single()
+        ]);
+        return {
+          userName: profile?.full_name || 'A team member',
+          groupName: group?.name || 'a group'
+        };
+      } catch (err) {
+        return { userName: 'A team member', groupName: 'a group' };
+      }
+    };
 
     const setupListener = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !mounted) return;
+      if (!user || !mounted.current) return;
 
       // Realtime listener for group_members (when someone joins a group)
       const memberChannel = supabase
@@ -19,18 +38,18 @@ export function useNotificationListener() {
         .on(
           'postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'group_members' },
-          (payload) => {
-            // Ignore our own join events
-            if ((payload.new as any).user_id === user.id) return;
+          async (payload) => {
+            const newRow = payload.new as any;
+            if (!newRow || newRow.user_id === user.id) return;
             
-            // Note: Ideally, we should check if the new member's group is one we are also in,
-            // but for simplicity, we notify if the change happens in a group we might know.
-            const message = `A new member has joined a group you are in.`;
-            toast.success('New team member joined!');
+            const { userName, groupName } = await fetchDetails(newRow.user_id, newRow.group_id);
+            if (!mounted.current) return;
+
+            toast.success(`${userName} joined ${groupName}!`);
             addNotification({
-              title: 'New Member',
-              message,
-              type: 'info'
+              title: 'New Member Joined',
+              message: `${userName} has just joined the group "${groupName}". Say hi!`,
+              type: 'info' // keep info or success
             });
           }
         )
@@ -43,17 +62,30 @@ export function useNotificationListener() {
           'postgres_changes',
           { event: '*', schema: 'public', table: 'availability_slots' },
           (payload) => {
-            // Ignore our own changes
-            if (payload.new && (payload.new as any).user_id === user.id) return;
+            const row = payload.new as any;
+            if (!row || row.user_id === user.id) return; // ignore deletes and self updates
 
-            toast('A team member updated their availability', {
-              icon: '🗓️',
-            });
-            addNotification({
-              title: 'Schedule Updated',
-              message: 'A team member has updated their availability.',
-              type: 'info'
-            });
+            const key = `${row.user_id}-${row.group_id}`;
+            
+            if (pendingNotifications.has(key)) {
+              clearTimeout(pendingNotifications.get(key)!);
+            }
+
+            pendingNotifications.set(key, setTimeout(async () => {
+              pendingNotifications.delete(key);
+              
+              const { userName, groupName } = await fetchDetails(row.user_id, row.group_id);
+              if (!mounted.current) return;
+
+              toast(`${userName} updated their availability in ${groupName}`, {
+                icon: '🗓️',
+              });
+              addNotification({
+                title: 'Schedule Updated',
+                message: `${userName} recently updated their availability in "${groupName}".`,
+                type: 'info'
+              });
+            }, 2500)); // wait 2.5s to debounce multiple slot updates
           }
         )
         .subscribe();
@@ -67,7 +99,7 @@ export function useNotificationListener() {
     const cleanupPromise = setupListener();
 
     return () => {
-      mounted = false;
+      mounted.current = false;
       cleanupPromise.then(cleanup => cleanup && cleanup());
     };
   }, [addNotification]);
