@@ -71,39 +71,39 @@ export function Home() {
         </button>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-4 md:gap-8">
+      <div className="grid grid-cols-2 gap-3 md:gap-8">
         <button 
           onClick={() => setCreateGroupOpen(true)}
-          className="w-full relative group overflow-hidden rounded-[24px] md:rounded-[36px] glass p-6 md:p-10 flex items-center justify-between transition-all hover:bg-card/80 hover:scale-[1.02] border border-white/5 shadow-xl"
+          className="w-full relative group overflow-hidden rounded-[24px] md:rounded-[36px] glass p-5 md:p-10 flex flex-col md:flex-row items-center justify-center md:justify-between transition-all hover:bg-card/80 hover:scale-[1.02] border border-white/5 shadow-xl"
         >
           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-          <div className="flex items-center gap-5 md:gap-6 relative z-10">
-            <div className="p-4 md:p-6 rounded-2xl md:rounded-[24px] bg-blue-500/20 text-blue-400 shadow-inner">
-              <Users size={28} className="md:w-10 md:h-10" />
+          <div className="flex flex-col md:flex-row items-center gap-3 md:gap-6 relative z-10 w-full md:w-auto">
+            <div className="p-4 md:p-6 rounded-2xl md:rounded-[24px] bg-blue-500/20 text-blue-400 shadow-inner shrink-0">
+              <Users size={24} className="md:w-10 md:h-10" />
             </div>
-            <div className="text-left">
-              <h3 className="font-bold text-lg md:text-2xl text-white">Create a Group</h3>
-              <p className="text-sm md:text-lg text-gray-400 mt-1.5">Start a new sync space</p>
+            <div className="text-center md:text-left">
+              <h3 className="font-bold text-sm md:text-2xl text-white">Create Group</h3>
+              <p className="text-[11px] md:text-lg text-gray-400 mt-1 md:mt-1.5 hidden md:block">Start a new sync space</p>
             </div>
           </div>
-          <ArrowRight className="text-gray-500 group-hover:text-white transition-colors md:w-8 md:h-8" />
+          <ArrowRight className="hidden md:block text-gray-500 group-hover:text-white transition-colors md:w-8 md:h-8 shrink-0" />
         </button>
 
         <button 
           onClick={() => setJoinGroupOpen(true)}
-          className="w-full relative group overflow-hidden rounded-[24px] md:rounded-[36px] glass p-6 md:p-10 flex items-center justify-between transition-all hover:bg-card/80 hover:scale-[1.02] border border-white/5 shadow-xl"
+          className="w-full relative group overflow-hidden rounded-[24px] md:rounded-[36px] glass p-5 md:p-10 flex flex-col md:flex-row items-center justify-center md:justify-between transition-all hover:bg-card/80 hover:scale-[1.02] border border-white/5 shadow-xl"
         >
            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-          <div className="flex items-center gap-5 md:gap-6 relative z-10">
-            <div className="p-4 md:p-6 rounded-2xl md:rounded-[24px] bg-emerald-500/20 text-emerald-400 shadow-inner">
-              <CalendarPlus size={28} className="md:w-10 md:h-10" />
+          <div className="flex flex-col md:flex-row items-center gap-3 md:gap-6 relative z-10 w-full md:w-auto">
+            <div className="p-4 md:p-6 rounded-2xl md:rounded-[24px] bg-emerald-500/20 text-emerald-400 shadow-inner shrink-0">
+              <CalendarPlus size={24} className="md:w-10 md:h-10" />
             </div>
-            <div className="text-left">
-              <h3 className="font-bold text-lg md:text-2xl text-white">Join via Code</h3>
-              <p className="text-sm md:text-lg text-gray-400 mt-1.5">Enter an invite code</p>
+            <div className="text-center md:text-left">
+              <h3 className="font-bold text-sm md:text-2xl text-white">Join via Code</h3>
+              <p className="text-[11px] md:text-lg text-gray-400 mt-1 md:mt-1.5 hidden md:block">Enter an invite code</p>
             </div>
           </div>
-          <ArrowRight className="text-gray-500 group-hover:text-white transition-colors md:w-8 md:h-8" />
+          <ArrowRight className="hidden md:block text-gray-500 group-hover:text-white transition-colors md:w-8 md:h-8 shrink-0" />
         </button>
       </div>
       

@@ -37,31 +37,31 @@ export function GroupDetail() {
         
         {/* Left Column: Info & Actions */}
         <div className="lg:col-span-7 flex flex-col gap-6 md:gap-8">
-          <div className="glass p-8 md:p-12 rounded-[32px] md:rounded-[48px] border border-white/5 shadow-2xl relative overflow-hidden">
+          <div className="glass p-5 md:p-12 rounded-[24px] md:rounded-[48px] border border-white/5 shadow-2xl relative overflow-hidden">
             <div className="absolute -top-10 -right-10 w-48 h-48 md:w-64 md:h-64 bg-primary/10 blur-[80px] rounded-full"></div>
-            <p className="text-sm md:text-lg text-gray-400 mb-4 font-bold uppercase tracking-widest relative z-10">Invite Code</p>
+            <p className="text-xs md:text-lg text-gray-400 mb-2 md:mb-4 font-bold uppercase tracking-widest relative z-10">Invite Code</p>
             <div className="flex items-center justify-between relative z-10">
-              <span className="text-4xl md:text-6xl font-mono font-bold tracking-[0.2em] text-primary">{group.invite_code.toUpperCase()}</span>
+              <span className="text-3xl md:text-6xl font-mono font-bold tracking-[0.2em] text-primary">{group.invite_code.toUpperCase()}</span>
               <button 
                 onClick={() => {
                   navigator.clipboard.writeText(group.invite_code);
                   toast.success('Invite code copied!');
                 }} 
-                className="p-4 md:p-6 rounded-2xl md:rounded-[24px] bg-white/5 hover:bg-white/10 text-gray-300 transition-colors border border-white/10 active:scale-95"
+                className="p-3 md:p-6 rounded-xl md:rounded-[24px] bg-white/5 hover:bg-white/10 text-gray-300 transition-colors border border-white/10 active:scale-95 shrink-0"
               >
-                <Copy size={24} className="md:w-8 md:h-8" />
+                <Copy size={20} className="md:w-8 md:h-8" />
               </button>
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-4 md:gap-6">
-            <Link to={`/availability/${group.id}`} className="flex-1 glass p-6 md:p-10 rounded-[28px] md:rounded-[40px] flex flex-col items-center justify-center gap-4 hover:bg-card/80 transition-all border border-white/5 hover:scale-[1.02] shadow-xl">
-              <div className="p-4 md:p-6 bg-blue-500/20 text-blue-400 rounded-2xl md:rounded-3xl shadow-inner"><CalendarIcon size={28} className="md:w-10 md:h-10" /></div>
-              <span className="text-base md:text-xl font-bold text-white">Set Availability</span>
+          <div className="grid grid-cols-2 gap-3 md:gap-6">
+            <Link to={`/availability/${group.id}`} className="flex-1 glass p-4 md:p-10 rounded-[20px] md:rounded-[40px] flex flex-col items-center justify-center gap-3 md:gap-4 hover:bg-card/80 transition-all border border-white/5 hover:scale-[1.02] shadow-xl text-center">
+              <div className="p-3 md:p-6 bg-blue-500/20 text-blue-400 rounded-xl md:rounded-3xl shadow-inner"><CalendarIcon size={24} className="md:w-10 md:h-10" /></div>
+              <span className="text-[13px] md:text-xl font-bold text-white leading-tight">Set Availability</span>
             </Link>
-            <Link to={`/match/${group.id}`} className="flex-1 glass p-6 md:p-10 rounded-[28px] md:rounded-[40px] flex flex-col items-center justify-center gap-4 hover:bg-card/80 transition-all border border-white/5 hover:scale-[1.02] shadow-xl">
-              <div className="p-4 md:p-6 bg-purple-500/20 text-purple-400 rounded-2xl md:rounded-3xl shadow-inner"><Users size={28} className="md:w-10 md:h-10" /></div>
-              <span className="text-base md:text-xl font-bold text-white">View Matches</span>
+            <Link to={`/match/${group.id}`} className="flex-1 glass p-4 md:p-10 rounded-[20px] md:rounded-[40px] flex flex-col items-center justify-center gap-3 md:gap-4 hover:bg-card/80 transition-all border border-white/5 hover:scale-[1.02] shadow-xl text-center">
+              <div className="p-3 md:p-6 bg-purple-500/20 text-purple-400 rounded-xl md:rounded-3xl shadow-inner"><Users size={24} className="md:w-10 md:h-10" /></div>
+              <span className="text-[13px] md:text-xl font-bold text-white leading-tight">View Matches</span>
             </Link>
           </div>
         </div>
