@@ -7,7 +7,8 @@ import {
   fetchRotationLogs, 
   saveRotationLog, 
   deleteRotationLog, 
-  isRotationLocalOnly 
+  isRotationLocalOnly,
+  subscribeToRotationLogs
 } from '../features/groups/api/rotation-api';
 import { 
   format, 
@@ -82,6 +83,19 @@ export function Rotation() {
     queryFn: () => fetchRotationLogs(selectedGroupId),
     enabled: !!selectedGroupId
   });
+
+  // Real-time subscription to rotation logs
+  useEffect(() => {
+    if (!selectedGroupId || isRotationLocalOnly()) return;
+
+    const subscription = subscribeToRotationLogs(selectedGroupId, () => {
+      queryClient.invalidateQueries({ queryKey: ['rotation_logs', selectedGroupId] });
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [selectedGroupId, queryClient]);
 
   // Mutations
   const addLogMutation = useMutation({
@@ -161,6 +175,22 @@ export function Rotation() {
 
   const stats = getStats();
   const nextUp = stats.length > 0 ? stats[0] : null;
+
+  // Get logs for the current selected month
+  const getLogsForSelectedMonth = () => {
+    if (!logs) return [];
+    return logs.filter(log => {
+      try {
+        const logDate = parseISO(log.tracked_date);
+        return logDate.getMonth() === currentMonth.getMonth() && 
+               logDate.getFullYear() === currentMonth.getFullYear();
+      } catch (e) {
+        return false;
+      }
+    }).sort((a, b) => b.tracked_date.localeCompare(a.tracked_date) || new Date(b.tracked_at).getTime() - new Date(a.tracked_at).getTime()); // Sort newest day first
+  };
+
+  const monthlyLogs = getLogsForSelectedMonth();
 
   // Calendar calculations
   const monthStart = startOfMonth(currentMonth);
@@ -538,24 +568,25 @@ export function Rotation() {
             {/* History Feed Card */}
             <div className="glass p-6 rounded-[28px] border border-white/5 shadow-xl flex flex-col max-h-[400px]">
               <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
-                <History size={18} className="text-gray-400" />
-                Recent Activity
+                <History size={18} className="text-gray-400 animate-pulse" />
+                Logs in {format(currentMonth, 'MMMM yyyy')}
+                <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full ml-auto font-bold">{monthlyLogs.length}</span>
               </h3>
 
               {isLogsLoading ? (
                 <div className="py-10 flex justify-center">
                   <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
                 </div>
-              ) : !logs || logs.length === 0 ? (
-                <div className="text-center py-10">
+              ) : !monthlyLogs || monthlyLogs.length === 0 ? (
+                <div className="text-center py-10 flex-1 flex flex-col justify-center">
                   <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-3 border border-white/10">
                     <ClipboardList size={20} className="text-gray-500" />
                   </div>
-                  <p className="text-gray-400 text-sm">No turn records logged yet.</p>
+                  <p className="text-gray-400 text-sm">No logs recorded this month.</p>
                 </div>
               ) : (
                 <div className="space-y-4 overflow-y-auto hide-scrollbar flex-1 pr-1">
-                  {logs.slice(0, 15).map(log => {
+                  {monthlyLogs.map(log => {
                     const profile = getProfileForLog(log);
                     const isOwnLog = log.user_id === user?.id;
 

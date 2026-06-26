@@ -160,3 +160,21 @@ function deleteLocalLog(logId: string, groupId: string) {
 export function isRotationLocalOnly(): boolean {
   return useLocalFallback;
 }
+
+export function subscribeToRotationLogs(groupId: string, callback: () => void) {
+  if (useLocalFallback) {
+    return { unsubscribe: () => {} };
+  }
+  return supabase
+    .channel(`public:rotation_logs:group_id=eq.${groupId}`)
+    .on('postgres_changes', { 
+      event: '*', 
+      schema: 'public', 
+      table: 'rotation_logs',
+      filter: `group_id=eq.${groupId}` 
+    }, () => {
+      callback();
+    })
+    .subscribe();
+}
+
