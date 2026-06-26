@@ -36,7 +36,12 @@ let useLocalFallback = false;
 
 // Check if error is due to missing relation/table (code '42P01')
 function isTableMissingError(error: any): boolean {
-  return error && (error.code === '42P01' || (error.message && error.message.includes('relation') && error.message.includes('does not exist')));
+  if (!error) return false;
+  const code = error.code || (error.pg_error_code) || '';
+  const message = error.message || '';
+  return code === '42P01' || 
+         message.includes('relation') && message.includes('does not exist') ||
+         message.includes('42P01');
 }
 
 export function isRotationLocalOnly(): boolean {
@@ -56,14 +61,34 @@ export async function fetchUserRotationGroups(): Promise<RotationGroup[]> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
+    // Two-step query to avoid PostgREST relationship cache issues
+    const { data: memberships, error: memberError } = await supabase
+      .from('rotation_members')
+      .select('group_id')
+      .eq('user_id', user.id);
+
+    if (memberError) {
+      if (isTableMissingError(memberError)) {
+        console.warn('rotation_members table not found. Falling back to local storage.');
+        useLocalFallback = true;
+        return getLocalGroups();
+      }
+      throw memberError;
+    }
+
+    if (!memberships || memberships.length === 0) {
+      return [];
+    }
+
+    const groupIds = memberships.map(m => m.group_id);
+
     const { data, error } = await supabase
       .from('rotation_groups')
-      .select('*, rotation_members!inner(user_id)')
-      .eq('rotation_members.user_id', user.id);
+      .select('*')
+      .in('id', groupIds);
 
     if (error) {
       if (isTableMissingError(error)) {
-        console.warn('rotation_groups table not found. Falling back to local storage.');
         useLocalFallback = true;
         return getLocalGroups();
       }
@@ -71,10 +96,13 @@ export async function fetchUserRotationGroups(): Promise<RotationGroup[]> {
     }
 
     return data as RotationGroup[];
-  } catch (err) {
-    console.error('Supabase groups fetch failed, falling back to local storage:', err);
-    useLocalFallback = true;
-    return getLocalGroups();
+  } catch (err: any) {
+    if (isTableMissingError(err)) {
+      useLocalFallback = true;
+      return getLocalGroups();
+    }
+    console.error('Supabase groups fetch failed:', err);
+    throw err;
   }
 }
 
@@ -108,10 +136,13 @@ export async function createRotationGroup(name: string): Promise<RotationGroup> 
     if (memberErr) throw memberErr;
 
     return group as RotationGroup;
-  } catch (err) {
-    console.error('Supabase group creation failed, falling back to local storage:', err);
-    useLocalFallback = true;
-    return createLocalGroup(name, user.id);
+  } catch (err: any) {
+    if (isTableMissingError(err)) {
+      useLocalFallback = true;
+      return createLocalGroup(name, user.id);
+    }
+    console.error('Supabase group creation failed:', err);
+    throw err;
   }
 }
 
@@ -150,10 +181,12 @@ export async function joinRotationGroup(inviteCode: string): Promise<RotationGro
 
     return group as RotationGroup;
   } catch (err: any) {
-    if (err.message && err.message.includes('not found')) throw err;
-    console.error('Supabase group join failed, falling back to local storage:', err);
-    useLocalFallback = true;
-    return joinLocalGroup(cleanCode, user.id);
+    if (isTableMissingError(err)) {
+      useLocalFallback = true;
+      return joinLocalGroup(cleanCode, user.id);
+    }
+    console.error('Supabase group join failed:', err);
+    throw err;
   }
 }
 
@@ -190,9 +223,13 @@ export async function fetchRotationGroupMembers(groupId: string): Promise<Rotati
     }
 
     return data as any[];
-  } catch (err) {
-    console.error('Supabase members fetch failed, falling back to local storage:', err);
-    return getLocalGroupMembers(groupId);
+  } catch (err: any) {
+    if (isTableMissingError(err)) {
+      useLocalFallback = true;
+      return getLocalGroupMembers(groupId);
+    }
+    console.error('Supabase members fetch failed:', err);
+    throw err;
   }
 }
 
@@ -249,9 +286,13 @@ export async function fetchRotationLogs(groupId: string): Promise<RotationLog[]>
     }
 
     return data as RotationLog[];
-  } catch (err) {
-    console.error('Supabase logs fetch failed, falling back to local storage:', err);
-    return getLocalLogs(groupId);
+  } catch (err: any) {
+    if (isTableMissingError(err)) {
+      useLocalFallback = true;
+      return getLocalLogs(groupId);
+    }
+    console.error('Supabase logs fetch failed:', err);
+    throw err;
   }
 }
 
@@ -289,9 +330,14 @@ export async function saveRotationLog(
       }
       throw error;
     }
-  } catch (err) {
-    console.error('Supabase save log failed, falling back to local storage:', err);
-    saveLocalLog(groupId, userIdToSave, dateStr, notes);
+  } catch (err: any) {
+    if (isTableMissingError(err)) {
+      useLocalFallback = true;
+      saveLocalLog(groupId, userIdToSave, dateStr, notes);
+      return;
+    }
+    console.error('Supabase save log failed:', err);
+    throw err;
   }
 }
 
@@ -315,9 +361,14 @@ export async function deleteRotationLog(logId: string, groupId: string): Promise
       }
       throw error;
     }
-  } catch (err) {
-    console.error('Supabase delete log failed, falling back to local storage:', err);
-    deleteLocalLog(logId, groupId);
+  } catch (err: any) {
+    if (isTableMissingError(err)) {
+      useLocalFallback = true;
+      deleteLocalLog(logId, groupId);
+      return;
+    }
+    console.error('Supabase delete log failed:', err);
+    throw err;
   }
 }
 
