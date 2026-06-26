@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/useAuthStore';
-import { useUIStore } from '../store/useUIStore';
-import { fetchUserGroups, fetchGroupMembers } from '../features/groups/api/groups-api';
 import { 
+  fetchUserRotationGroups, 
+  createRotationGroup,
+  joinRotationGroup,
+  fetchRotationGroupMembers, 
+  addRotationMockMember,
   fetchRotationLogs, 
   saveRotationLog, 
   deleteRotationLog, 
@@ -34,30 +37,39 @@ import {
   User, 
   ClipboardList, 
   AlertTriangle,
-  History
+  History,
+  UserPlus,
+  PlusCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export function Rotation() {
   const { user } = useAuthStore();
-  const { setCreateGroupOpen, setJoinGroupOpen } = useUIStore();
   const queryClient = useQueryClient();
 
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  
+  // Custom Modals State for Rotation Groups
+  const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
+  const [isJoinGroupModalOpen, setIsJoinGroupModalOpen] = useState(false);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [isDayDetailsOpen, setIsDayDetailsOpen] = useState(false);
+  const [isMockMemberModalOpen, setIsMockMemberModalOpen] = useState(false);
   
-  // Log Turn Form State
+  // Forms State
+  const [newGroupName, setNewGroupName] = useState('');
+  const [joinInviteCode, setJoinInviteCode] = useState('');
+  const [mockMemberName, setMockMemberName] = useState('');
   const [logFormUserId, setLogFormUserId] = useState<string>('');
   const [logFormNotes, setLogFormNotes] = useState<string>('');
   const [logFormDate, setLogFormDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
 
-  // 1. Fetch user's groups
+  // 1. Fetch user's rotation groups
   const { data: groups, isLoading: isGroupsLoading } = useQuery({
-    queryKey: ['groups'],
-    queryFn: fetchUserGroups,
+    queryKey: ['rotation_groups'],
+    queryFn: fetchUserRotationGroups,
     enabled: !!user
   });
 
@@ -72,8 +84,8 @@ export function Rotation() {
 
   // 2. Fetch members of the selected group
   const { data: members, isLoading: isMembersLoading } = useQuery({
-    queryKey: ['group_members', selectedGroupId],
-    queryFn: () => fetchGroupMembers(selectedGroupId),
+    queryKey: ['rotation_members', selectedGroupId],
+    queryFn: () => fetchRotationGroupMembers(selectedGroupId),
     enabled: !!selectedGroupId
   });
 
@@ -98,6 +110,47 @@ export function Rotation() {
   }, [selectedGroupId, queryClient]);
 
   // Mutations
+  const createGroupMutation = useMutation({
+    mutationFn: createRotationGroup,
+    onSuccess: (newGroup) => {
+      queryClient.invalidateQueries({ queryKey: ['rotation_groups'] });
+      setSelectedGroupId(newGroup.id);
+      setIsCreateGroupModalOpen(false);
+      setNewGroupName('');
+      toast.success('Rotation group created!');
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to create group');
+    }
+  });
+
+  const joinGroupMutation = useMutation({
+    mutationFn: joinRotationGroup,
+    onSuccess: (joinedGroup) => {
+      queryClient.invalidateQueries({ queryKey: ['rotation_groups'] });
+      setSelectedGroupId(joinedGroup.id);
+      setIsJoinGroupModalOpen(false);
+      setJoinInviteCode('');
+      toast.success(`Joined group "${joinedGroup.name}"!`);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to join group');
+    }
+  });
+
+  const addMockMemberMutation = useMutation({
+    mutationFn: (name: string) => addRotationMockMember(selectedGroupId, name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rotation_members', selectedGroupId] });
+      setIsMockMemberModalOpen(false);
+      setMockMemberName('');
+      toast.success('Mock member added locally!');
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to add mock member');
+    }
+  });
+
   const addLogMutation = useMutation({
     mutationFn: ({ date, notes, targetUserId }: { date: string; notes: string; targetUserId?: string }) => 
       saveRotationLog(selectedGroupId, date, notes, targetUserId),
@@ -123,10 +176,9 @@ export function Rotation() {
     }
   });
 
-  // Helper to map profiles when locally fallbacking or missing profiles
+  // Helper to map profiles
   const getProfileForLog = (log: any) => {
     if (log.profiles) return log.profiles;
-    // Map from members list
     const member = members?.find(m => m.user_id === log.user_id);
     if (member) return member.profiles;
     return {
@@ -140,7 +192,6 @@ export function Rotation() {
   const getStats = () => {
     if (!members || !logs) return [];
     
-    // Count turns
     const counts: Record<string, number> = {};
     const lastActive: Record<string, string> = {};
     
@@ -165,7 +216,6 @@ export function Rotation() {
         lastActive: lastActive[m.user_id] || null
       };
     }).sort((a, b) => {
-      // Sort by turn count ascending (who has done the least work), then by last active (longest ago)
       if (a.count !== b.count) return a.count - b.count;
       if (!a.lastActive) return -1;
       if (!b.lastActive) return 1;
@@ -175,6 +225,20 @@ export function Rotation() {
 
   const stats = getStats();
   const nextUp = stats.length > 0 ? stats[0] : null;
+
+  // Calendar calculations
+  const monthStart = startOfMonth(currentMonth);
+  const monthEnd = endOfMonth(monthStart);
+  const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  
+  const startDayOfWeekIndex = (getDay(monthStart) + 6) % 7; 
+  const calendarPadding = Array(startDayOfWeekIndex).fill(null);
+
+  const getLogsForDate = (date: Date) => {
+    if (!logs) return [];
+    const dateStr = format(date, 'yyyy-MM-dd');
+    return logs.filter(log => log.tracked_date === dateStr);
+  };
 
   // Get logs for the current selected month
   const getLogsForSelectedMonth = () => {
@@ -191,23 +255,6 @@ export function Rotation() {
   };
 
   const monthlyLogs = getLogsForSelectedMonth();
-
-  // Calendar calculations
-  const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(monthStart);
-  const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
-  
-  // Calculate padding days for start of month
-  // date-fns getDay: 0 is Sunday, 1 is Monday...
-  // We want Mon = 0, Tue = 1 ... Sun = 6
-  const startDayOfWeekIndex = (getDay(monthStart) + 6) % 7; 
-  const calendarPadding = Array(startDayOfWeekIndex).fill(null);
-
-  const getLogsForDate = (date: Date) => {
-    if (!logs) return [];
-    const dateStr = format(date, 'yyyy-MM-dd');
-    return logs.filter(log => log.tracked_date === dateStr);
-  };
 
   const copyInviteCode = () => {
     if (!selectedGroup) return;
@@ -252,7 +299,7 @@ export function Rotation() {
         <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex gap-3 text-amber-400 text-xs md:text-sm items-start shadow-lg">
           <AlertTriangle className="shrink-0 w-5 h-5 mt-0.5" />
           <div>
-            <span className="font-bold">Offline Mode:</span> The <code className="bg-black/30 px-1.5 py-0.5 rounded">rotation_logs</code> table is not configured in Supabase. Turns are stored in LocalStorage. Check <a href="file:///Users/nguyenminhkhang/Documents/react/group-scheduler/docs/database/rotation_logs.sql" className="underline font-bold">rotation_logs.sql</a> to enable group syncing.
+            <span className="font-bold">Offline Mode (LocalStorage):</span> Tables are not configured in Supabase. Groups and logs are stored locally. Check <a href="file:///Users/nguyenminhkhang/Documents/react/group-scheduler/docs/database/rotation_logs.sql" className="underline font-bold">rotation_logs.sql</a> to enable cloud sync.
           </div>
         </div>
       )}
@@ -264,7 +311,7 @@ export function Rotation() {
             <RotateCw size={36} className="text-primary animate-spin-slow" />
             Rotation Tracker
           </h2>
-          <p className="text-gray-400 text-sm md:text-lg">Track chores, duties, or schedules rotating among members.</p>
+          <p className="text-gray-400 text-sm md:text-lg">Track chores or duties in rotation groups separate from availability groups.</p>
         </div>
 
         <div className="flex flex-wrap gap-2.5">
@@ -286,16 +333,16 @@ export function Rotation() {
           ) : null}
 
           <button
-            onClick={() => setJoinGroupOpen(true)}
+            onClick={() => setIsJoinGroupModalOpen(true)}
             className="p-3 bg-white/5 border border-white/10 text-emerald-400 hover:text-emerald-300 hover:bg-white/10 transition-colors rounded-2xl text-sm font-bold flex items-center gap-2 shadow-lg"
           >
-            Join Group
+            Join Rotation Group
           </button>
           <button
-            onClick={() => setCreateGroupOpen(true)}
+            onClick={() => setIsCreateGroupModalOpen(true)}
             className="p-3 bg-primary hover:bg-blue-600 transition-colors text-white rounded-2xl text-sm font-bold flex items-center gap-2 shadow-lg shadow-primary/20"
           >
-            <Plus size={16} /> Create Group
+            <Plus size={16} /> New Rotation Group
           </button>
         </div>
       </div>
@@ -306,17 +353,17 @@ export function Rotation() {
           <div className="w-20 h-20 rounded-full bg-white/5 mx-auto flex items-center justify-center mb-6 border border-white/10">
             <ClipboardList size={36} className="text-gray-500" />
           </div>
-          <h3 className="text-2xl font-bold mb-4">No Groups Found</h3>
-          <p className="text-gray-400 mb-8 max-w-md mx-auto">Create a group or join one using an invite code to start tracking member rotations.</p>
+          <h3 className="text-2xl font-bold mb-4">No Rotation Groups Found</h3>
+          <p className="text-gray-400 mb-8 max-w-md mx-auto">Create a rotation group or join one to begin logging turns independently from matching group times.</p>
           <div className="flex gap-4 justify-center">
             <button 
-              onClick={() => setJoinGroupOpen(true)} 
+              onClick={() => setIsJoinGroupModalOpen(true)} 
               className="bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold px-6 py-3.5 rounded-2xl transition-all"
             >
               Join Group
             </button>
             <button 
-              onClick={() => setCreateGroupOpen(true)} 
+              onClick={() => setIsCreateGroupModalOpen(true)} 
               className="bg-primary hover:bg-blue-600 text-white font-bold px-6 py-3.5 rounded-2xl transition-all shadow-lg shadow-primary/20"
             >
               Create Group
@@ -338,8 +385,11 @@ export function Rotation() {
                     {selectedGroup.name.charAt(0)}
                   </div>
                   <div>
-                    <h4 className="font-bold text-lg text-white leading-tight">{selectedGroup.name}</h4>
-                    <p className="text-xs text-gray-400 mt-0.5">{members?.length || 0} rotation members</p>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-lg text-white leading-tight">{selectedGroup.name}</h4>
+                      <span className="text-[10px] bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Rotation Group</span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">{members?.length || 0} members active</p>
                   </div>
                 </div>
                 
@@ -354,6 +404,15 @@ export function Rotation() {
                   >
                     <Copy size={16} />
                   </button>
+                  {isLocalOnly && (
+                    <button
+                      onClick={() => setIsMockMemberModalOpen(true)}
+                      className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500/20 text-indigo-400 transition-colors active:scale-95 text-xs font-bold flex items-center gap-1.5"
+                      title="Add mock user for local testing"
+                    >
+                      <UserPlus size={15} /> Add Mock Member
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -468,7 +527,6 @@ export function Rotation() {
                           </div>
                         )}
                         
-                        {/* Glow dot overlay on hover */}
                         <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
                       </button>
                     );
@@ -529,7 +587,7 @@ export function Rotation() {
               </div>
             )}
 
-            {/* Member turn leaderboard stats */}
+            {/* Member stats list */}
             <div className="glass p-6 rounded-[28px] border border-white/5 shadow-xl flex flex-col max-h-[300px]">
               <h3 className="font-bold text-lg text-white mb-4 flex items-center justify-between">
                 Rotation Members
@@ -637,10 +695,140 @@ export function Rotation() {
         </div>
       )}
 
-      {/* 1. Log Turn Modal */}
+      {/* 1. Custom Create Rotation Group Modal */}
+      {isCreateGroupModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-sm glass rounded-[32px] p-6 border border-white/10 shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setIsCreateGroupModalOpen(false)}
+              className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 transition-colors text-gray-400"
+            >
+              Cancel
+            </button>
+            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+              <PlusCircle size={22} className="text-primary" />
+              New Rotation Group
+            </h2>
+            <form onSubmit={(e) => { e.preventDefault(); if (newGroupName.trim()) createGroupMutation.mutate(newGroupName); }}>
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-xs font-black text-gray-400 mb-2 uppercase tracking-widest px-1">Group Name</label>
+                  <input 
+                    type="text" 
+                    value={newGroupName}
+                    onChange={(e) => setNewGroupName(e.target.value)}
+                    placeholder="e.g. Cooking Rotation, Chores..." 
+                    className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-inner"
+                    required
+                  />
+                </div>
+                <button 
+                  type="submit" 
+                  disabled={createGroupMutation.isPending || !newGroupName.trim()}
+                  className="w-full bg-primary text-white font-medium px-4 py-4 rounded-2xl hover:bg-blue-600 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-primary/20"
+                >
+                  {createGroupMutation.isPending ? <RotateCw className="animate-spin w-5 h-5" /> : null}
+                  Create Group
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Custom Join Rotation Group Modal */}
+      {isJoinGroupModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-sm glass rounded-[32px] p-6 border border-white/10 shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setIsJoinGroupModalOpen(false)}
+              className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 transition-colors text-gray-400"
+            >
+              Cancel
+            </button>
+            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+              <Users size={22} className="text-emerald-400" />
+              Join Rotation Group
+            </h2>
+            <form onSubmit={(e) => { e.preventDefault(); if (joinInviteCode.trim()) joinGroupMutation.mutate(joinInviteCode); }}>
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-xs font-black text-gray-400 mb-2 uppercase tracking-widest px-1">Invite Code</label>
+                  <input 
+                    type="text" 
+                    value={joinInviteCode}
+                    onChange={(e) => setJoinInviteCode(e.target.value)}
+                    placeholder="Enter the 6-character code" 
+                    className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all font-mono tracking-widest text-center shadow-inner uppercase"
+                    required
+                  />
+                </div>
+                <button 
+                  type="submit" 
+                  disabled={joinGroupMutation.isPending || !joinInviteCode.trim()}
+                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-medium px-4 py-4 rounded-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-emerald-500/20"
+                >
+                  {joinGroupMutation.isPending ? <RotateCw className="animate-spin w-5 h-5" /> : null}
+                  Join Group
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Add Mock Member Modal (Offline LocalStorage mode only) */}
+      {isMockMemberModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-sm glass rounded-[32px] p-6 border border-white/10 shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setIsMockMemberModalOpen(false)}
+              className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 transition-colors text-gray-400"
+            >
+              Cancel
+            </button>
+            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+              <UserPlus size={22} className="text-indigo-400" />
+              Add Mock Member
+            </h2>
+            <p className="text-xs text-gray-400 mb-4">Adding a member locally allows you to simulate rotations on this device without running SQL migrations.</p>
+            <form onSubmit={(e) => { e.preventDefault(); if (mockMemberName.trim()) addMockMemberMutation.mutate(mockMemberName); }}>
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-xs font-black text-gray-400 mb-2 uppercase tracking-widest px-1">Member Full Name</label>
+                  <input 
+                    type="text" 
+                    value={mockMemberName}
+                    onChange={(e) => setMockMemberName(e.target.value)}
+                    placeholder="e.g. Alice Johnson" 
+                    className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-inner"
+                    required
+                  />
+                </div>
+                <button 
+                  type="submit" 
+                  disabled={addMockMemberMutation.isPending || !mockMemberName.trim()}
+                  className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-medium px-4 py-4 rounded-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-indigo-500/20"
+                >
+                  {addMockMemberMutation.isPending ? <RotateCw className="animate-spin w-5 h-5" /> : null}
+                  Add Member
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Log Turn Modal */}
       {isLogModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-md glass rounded-[32px] p-6 border border-white/10 shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setIsLogModalOpen(false)}
+              className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 transition-colors text-gray-400"
+            >
+              Cancel
+            </button>
             <h3 className="text-2xl font-bold mb-5 flex items-center gap-2">
               <ClipboardList size={22} className="text-primary" />
               Log Rotation Turn
@@ -652,12 +840,12 @@ export function Rotation() {
                 <select
                   value={logFormUserId}
                   onChange={(e) => setLogFormUserId(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3.5 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer"
+                  className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3.5 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer font-bold"
                   required
                 >
                   <option value="" disabled className="bg-neutral-900">Select group member</option>
                   {members?.map(m => (
-                    <option key={m.user_id} value={m.user_id} className="bg-neutral-900">
+                    <option key={m.user_id} value={m.user_id} className="bg-neutral-900 text-white font-semibold">
                       {m.profiles.full_name} {m.user_id === user?.id ? '(You)' : ''}
                     </option>
                   ))}
@@ -670,7 +858,7 @@ export function Rotation() {
                   type="date"
                   value={logFormDate}
                   onChange={(e) => setLogFormDate(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3.5 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+                  className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3.5 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all font-bold"
                   required
                 />
               </div>
@@ -707,7 +895,7 @@ export function Rotation() {
         </div>
       )}
 
-      {/* 2. Calendar Day Detail Modal */}
+      {/* 5. Calendar Day Detail Modal */}
       {isDayDetailsOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-md glass rounded-[32px] p-6 border border-white/10 shadow-2xl relative animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
@@ -749,7 +937,6 @@ export function Rotation() {
                         onClick={() => {
                           if (confirm('Are you sure you want to delete this log entry?')) {
                             deleteLogMutation.mutate(log.id);
-                            // If it was the last log on this date, close details modal
                             if (getLogsForDate(selectedDate).length <= 1) {
                               setIsDayDetailsOpen(false);
                             }
