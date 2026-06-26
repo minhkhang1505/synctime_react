@@ -8,7 +8,9 @@ Define the data structures, relationships, security policies (RLS), and optimiza
 erDiagram
     PROFILES ||--o{ GROUP_MEMBERS : "has"
     PROFILES ||--o{ AVAILABILITY_SLOTS : "has"
+    PROFILES ||--o{ ROTATION_LOGS : "has"
     GROUPS ||--o{ GROUP_MEMBERS : "has"
+    GROUPS ||--o{ ROTATION_LOGS : "has"
     GROUPS {
         uuid id PK
         string name
@@ -35,6 +37,15 @@ erDiagram
         time end_time
         timestamp updated_at
     }
+    ROTATION_LOGS {
+        uuid id PK
+        uuid group_id FK
+        uuid user_id FK
+        date tracked_date
+        text notes
+        timestamp tracked_at
+        timestamp created_at
+    }
 ```
 
 ## 3. Table Explanations
@@ -42,6 +53,7 @@ erDiagram
 - **`groups`**: Stores group details and a unique `invite_code` for sharing.
 - **`group_members`**: Junction table linking users to groups.
 - **`availability_slots`**: Stores time ranges when a user is free. Linked to both `user_id` and `group_id` so users can have different availability per group.
+- **`rotation_logs`**: Stores log records for member rotation tracking, recording which member tracked in which group, on what date, at what time, and with optional description notes.
 
 ## 4. Row Level Security (RLS) Strategy
 - **`profiles`**:

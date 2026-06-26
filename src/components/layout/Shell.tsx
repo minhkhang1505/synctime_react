@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
-import { Users, Home as HomeIcon, Bell } from "lucide-react";
+import { Users, Home as HomeIcon, Bell, RotateCw } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { CreateGroupModal } from "../../features/groups/components/CreateGroupModal";
 import { JoinGroupModal } from "../../features/groups/components/JoinGroupModal";
@@ -17,6 +17,7 @@ export function Shell() {
   const navItems = [
     { icon: HomeIcon, label: "Home", path: "/" },
     { icon: Users, label: "Groups", path: "/groups" },
+    { icon: RotateCw, label: "Rotation", path: "/rotation" },
     { icon: Bell, label: "Notifications", path: "/notifications", badge: count > 0 ? count : null },
   ];
 
