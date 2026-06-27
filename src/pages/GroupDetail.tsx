@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchGroupMembers, fetchUserGroups, deleteGroup } from '../features/groups/api/groups-api';
-import { ArrowLeft, Copy, Calendar as CalendarIcon, Users, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, Calendar as CalendarIcon, Users, Trash2, CreditCard } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/useAuthStore';
@@ -72,14 +72,18 @@ export function GroupDetail() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 md:gap-6">
-            <Link to={`/availability/${group.id}`} className="flex-1 glass p-4 md:p-10 rounded-[20px] md:rounded-[40px] flex flex-col items-center justify-center gap-3 md:gap-4 hover:bg-card/80 transition-all border border-white/5 hover:scale-[1.02] shadow-xl text-center">
-              <div className="p-3 md:p-6 bg-blue-500/20 text-blue-400 rounded-xl md:rounded-3xl shadow-inner"><CalendarIcon size={24} className="md:w-10 md:h-10" /></div>
-              <span className="text-[13px] md:text-xl font-bold text-white leading-tight">Set Availability</span>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-6">
+            <Link to={`/availability/${group.id}`} className="flex-1 glass p-4 md:p-8 rounded-[20px] md:rounded-[36px] flex flex-col items-center justify-center gap-3 md:gap-4 hover:bg-card/80 transition-all border border-white/5 hover:scale-[1.02] shadow-xl text-center">
+              <div className="p-3 md:p-5 bg-blue-500/20 text-blue-400 rounded-xl md:rounded-2xl shadow-inner"><CalendarIcon size={22} className="md:w-8 md:h-8" /></div>
+              <span className="text-[13px] md:text-base font-bold text-white leading-tight">Set Availability</span>
             </Link>
-            <Link to={`/match/${group.id}`} className="flex-1 glass p-4 md:p-10 rounded-[20px] md:rounded-[40px] flex flex-col items-center justify-center gap-3 md:gap-4 hover:bg-card/80 transition-all border border-white/5 hover:scale-[1.02] shadow-xl text-center">
-              <div className="p-3 md:p-6 bg-purple-500/20 text-purple-400 rounded-xl md:rounded-3xl shadow-inner"><Users size={24} className="md:w-10 md:h-10" /></div>
-              <span className="text-[13px] md:text-xl font-bold text-white leading-tight">View Matches</span>
+            <Link to={`/match/${group.id}`} className="flex-1 glass p-4 md:p-8 rounded-[20px] md:rounded-[36px] flex flex-col items-center justify-center gap-3 md:gap-4 hover:bg-card/80 transition-all border border-white/5 hover:scale-[1.02] shadow-xl text-center">
+              <div className="p-3 md:p-5 bg-purple-500/20 text-purple-400 rounded-xl md:rounded-2xl shadow-inner"><Users size={22} className="md:w-8 md:h-8" /></div>
+              <span className="text-[13px] md:text-base font-bold text-white leading-tight">View Matches</span>
+            </Link>
+            <Link to={`/payments/${group.id}`} className="flex-1 glass p-4 md:p-8 rounded-[20px] md:rounded-[36px] flex flex-col items-center justify-center gap-3 md:gap-4 hover:bg-card/80 transition-all border border-white/5 hover:scale-[1.02] shadow-xl text-center">
+              <div className="p-3 md:p-5 bg-emerald-500/20 text-emerald-400 rounded-xl md:rounded-2xl shadow-inner"><CreditCard size={22} className="md:w-8 md:h-8" /></div>
+              <span className="text-[13px] md:text-base font-bold text-white leading-tight">Payments & Bills</span>
             </Link>
           </div>
 

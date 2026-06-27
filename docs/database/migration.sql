@@ -420,6 +420,11 @@ BEGIN
         
         RETURN NEW;
     ELSIF (TG_OP = 'DELETE') THEN
+        -- If group is being deleted cascade, skip logging to avoid FK constraint violations
+        IF NOT EXISTS (SELECT 1 FROM public.groups WHERE id = OLD.group_id) THEN
+            RETURN OLD;
+        END IF;
+
         SELECT full_name INTO actor_name FROM public.profiles WHERE id = OLD.user_id;
         SELECT name INTO target_group_name FROM public.groups WHERE id = OLD.group_id;
 
@@ -469,6 +474,11 @@ DECLARE
     member_record RECORD;
 BEGIN
     IF (TG_OP = 'DELETE') THEN
+        -- If group is being deleted cascade, skip logging to avoid FK constraint violations
+        IF NOT EXISTS (SELECT 1 FROM public.groups WHERE id = OLD.group_id) THEN
+            RETURN OLD;
+        END IF;
+
         target_group_id := OLD.group_id;
         target_user_id := OLD.user_id;
         target_id := OLD.id;

@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/useAuthStore';
 import { 
   fetchUserRotationGroups, 
-  createRotationGroup,
-  joinRotationGroup,
   fetchRotationGroupMembers, 
   addRotationMockMember,
   fetchExpenses,
@@ -20,7 +19,6 @@ import {
 import { format, parseISO } from 'date-fns';
 import { 
   CreditCard, 
-  Users, 
   Plus, 
   Trash2, 
   Copy, 
@@ -30,26 +28,24 @@ import {
   DollarSign,
   CheckCircle2,
   X,
-  FileText
+  FileText,
+  ArrowLeft
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export function Rotation() {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
-  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const { id: selectedGroupId } = useParams<{ id: string }>();
   
   // Modal states
-  const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
-  const [isJoinGroupModalOpen, setIsJoinGroupModalOpen] = useState(false);
   const [isCreateExpenseModalOpen, setIsCreateExpenseModalOpen] = useState(false);
   const [isMockMemberModalOpen, setIsMockMemberModalOpen] = useState(false);
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   
   // Forms states
-  const [newGroupName, setNewGroupName] = useState('');
-  const [joinInviteCode, setJoinInviteCode] = useState('');
   const [mockMemberName, setMockMemberName] = useState('');
   const [expenseTitle, setExpenseTitle] = useState('');
   const [expenseAmount, setExpenseAmount] = useState('');
@@ -65,33 +61,26 @@ export function Rotation() {
     enabled: !!user
   });
 
-  // Set default group if none selected
-  useEffect(() => {
-    if (groups && groups.length > 0 && !selectedGroupId) {
-      setSelectedGroupId(groups[0].id);
-    }
-  }, [groups, selectedGroupId]);
-
   const selectedGroup = groups?.find(g => g.id === selectedGroupId);
 
   // 2. Fetch members of the selected group
   const { data: members, isLoading: isMembersLoading } = useQuery({
     queryKey: ['payments_members', selectedGroupId],
-    queryFn: () => fetchRotationGroupMembers(selectedGroupId),
+    queryFn: () => fetchRotationGroupMembers(selectedGroupId!),
     enabled: !!selectedGroupId
   });
 
   // 3. Fetch expenses
   const { data: expenses, isLoading: isExpensesLoading } = useQuery({
     queryKey: ['payments_expenses', selectedGroupId],
-    queryFn: () => fetchExpenses(selectedGroupId),
+    queryFn: () => fetchExpenses(selectedGroupId!),
     enabled: !!selectedGroupId
   });
 
   // 4. Fetch payment logs
   const { data: paymentLogs, isLoading: isPaymentLogsLoading } = useQuery({
     queryKey: ['payments_logs', selectedGroupId],
-    queryFn: () => fetchPaymentLogs(selectedGroupId),
+    queryFn: () => fetchPaymentLogs(selectedGroupId!),
     enabled: !!selectedGroupId
   });
 
@@ -99,7 +88,7 @@ export function Rotation() {
   useEffect(() => {
     if (!selectedGroupId || isRotationLocalOnly()) return;
 
-    const subscription = subscribeToPayments(selectedGroupId, () => {
+    const subscription = subscribeToPayments(selectedGroupId!, () => {
       queryClient.invalidateQueries({ queryKey: ['payments_expenses', selectedGroupId] });
       queryClient.invalidateQueries({ queryKey: ['payments_logs', selectedGroupId] });
     });
@@ -110,36 +99,8 @@ export function Rotation() {
   }, [selectedGroupId, queryClient]);
 
   // Mutations
-  const createGroupMutation = useMutation({
-    mutationFn: createRotationGroup,
-    onSuccess: (newGroup) => {
-      queryClient.invalidateQueries({ queryKey: ['payments_groups'] });
-      setSelectedGroupId(newGroup.id);
-      setIsCreateGroupModalOpen(false);
-      setNewGroupName('');
-      toast.success('Payment group created!');
-    },
-    onError: (err: any) => {
-      toast.error(err.message || 'Failed to create group');
-    }
-  });
-
-  const joinGroupMutation = useMutation({
-    mutationFn: joinRotationGroup,
-    onSuccess: (joinedGroup) => {
-      queryClient.invalidateQueries({ queryKey: ['payments_groups'] });
-      setSelectedGroupId(joinedGroup.id);
-      setIsJoinGroupModalOpen(false);
-      setJoinInviteCode('');
-      toast.success(`Joined group "${joinedGroup.name}"!`);
-    },
-    onError: (err: any) => {
-      toast.error(err.message || 'Failed to join group');
-    }
-  });
-
   const addMockMemberMutation = useMutation({
-    mutationFn: (name: string) => addRotationMockMember(selectedGroupId, name),
+    mutationFn: (name: string) => addRotationMockMember(selectedGroupId!, name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payments_members', selectedGroupId] });
       setIsMockMemberModalOpen(false);
@@ -153,7 +114,7 @@ export function Rotation() {
 
   const addExpenseMutation = useMutation({
     mutationFn: ({ title, amount }: { title: string; amount: number }) => 
-      createExpense(selectedGroupId, title, amount),
+      createExpense(selectedGroupId!, title, amount),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payments_expenses', selectedGroupId] });
       toast.success('Expense created successfully!');
@@ -167,7 +128,7 @@ export function Rotation() {
   });
 
   const deleteExpenseMutation = useMutation({
-    mutationFn: (expenseId: string) => deleteExpense(expenseId, selectedGroupId),
+    mutationFn: (expenseId: string) => deleteExpense(expenseId, selectedGroupId!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payments_expenses', selectedGroupId] });
       queryClient.invalidateQueries({ queryKey: ['payments_logs', selectedGroupId] });
@@ -283,46 +244,23 @@ export function Rotation() {
         </div>
       )}
 
-      {/* Header & Group Selector */}
-      <div className="mt-6 md:mt-2 mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Header with back button */}
+      <div className="flex items-center gap-4 mt-6 md:mt-2 mb-8">
+        <button 
+          onClick={() => navigate(`/groups/${selectedGroupId}`)} 
+          className="p-2.5 md:p-3 rounded-xl md:rounded-2xl glass text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+          title="Back to group details"
+        >
+          <ArrowLeft size={20} className="md:w-7 md:h-7" />
+        </button>
         <div>
-          <h2 className="text-3xl md:text-5xl font-bold tracking-tight mb-2 flex items-center gap-3">
-            <CreditCard size={36} className="text-primary animate-pulse" />
-            Payment Tracker
+          <h2 className="text-2xl md:text-5xl font-bold tracking-tight mb-1 flex items-center gap-3">
+            <CreditCard size={32} className="text-primary animate-pulse hidden md:inline-block" />
+            Payments & Expenses
           </h2>
-          <p className="text-gray-400 text-sm md:text-lg">Track group bills, split expenses, and verify member payments manually.</p>
-        </div>
-
-        <div className="flex flex-wrap gap-2.5">
-          {groups && groups.length > 0 ? (
-            <div className="flex items-center gap-2 bg-black/40 border border-white/10 rounded-2xl p-1.5 pr-3 shadow-inner">
-              <select
-                value={selectedGroupId}
-                onChange={(e) => setSelectedGroupId(e.target.value)}
-                className="bg-transparent text-white px-3 py-2 text-sm md:text-base font-bold focus:outline-none cursor-pointer max-w-[180px] md:max-w-[240px]"
-              >
-                {groups.map(g => (
-                  <option key={g.id} value={g.id} className="bg-neutral-900 text-white">
-                    {g.name}
-                  </option>
-                ))}
-              </select>
-              <Users size={16} className="text-gray-400 shrink-0" />
-            </div>
-          ) : null}
-
-          <button
-            onClick={() => setIsJoinGroupModalOpen(true)}
-            className="p-3 bg-white/5 border border-white/10 text-emerald-400 hover:text-emerald-300 hover:bg-white/10 transition-colors rounded-2xl text-sm font-bold flex items-center gap-2 shadow-lg"
-          >
-            Join Group
-          </button>
-          <button
-            onClick={() => setIsCreateGroupModalOpen(true)}
-            className="p-3 bg-primary hover:bg-blue-600 transition-colors text-white rounded-2xl text-sm font-bold flex items-center gap-2 shadow-lg shadow-primary/20"
-          >
-            <Plus size={16} /> New Group
-          </button>
+          <p className="text-gray-400 text-xs md:text-sm">
+            Manage shared bills and payments for {selectedGroup ? <span className="text-white font-semibold">"{selectedGroup.name}"</span> : 'this group'}.
+          </p>
         </div>
       </div>
 
@@ -332,20 +270,14 @@ export function Rotation() {
           <div className="w-20 h-20 rounded-full bg-white/5 mx-auto flex items-center justify-center mb-6 border border-white/10">
             <DollarSign size={36} className="text-gray-500" />
           </div>
-          <h3 className="text-2xl font-bold mb-4">No Groups Found</h3>
-          <p className="text-gray-400 mb-8 max-w-md mx-auto">Create a group or join one to begin adding shared bills and split expenses.</p>
+          <h3 className="text-2xl font-bold mb-4">No Group Selected</h3>
+          <p className="text-gray-400 mb-8 max-w-md mx-auto">Please go back to the Groups page and select a group to start tracking payments.</p>
           <div className="flex gap-4 justify-center">
             <button 
-              onClick={() => setIsJoinGroupModalOpen(true)} 
-              className="bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold px-6 py-3.5 rounded-2xl transition-all"
-            >
-              Join Group
-            </button>
-            <button 
-              onClick={() => setIsCreateGroupModalOpen(true)} 
+              onClick={() => navigate('/groups')} 
               className="bg-primary hover:bg-blue-600 text-white font-bold px-6 py-3.5 rounded-2xl transition-all shadow-lg shadow-primary/20"
             >
-              Create Group
+              Go to Groups
             </button>
           </div>
         </div>
@@ -623,77 +555,6 @@ export function Rotation() {
       )}
 
       {/* MODALS */}
-
-      {/* Create Group Modal */}
-      {isCreateGroupModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
-          <div className="bg-neutral-900 border border-white/10 rounded-[28px] w-full max-w-md overflow-hidden shadow-2xl relative">
-            <button 
-              onClick={() => setIsCreateGroupModalOpen(false)}
-              className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
-            >
-              <X size={18} />
-            </button>
-            <form onSubmit={(e) => { e.preventDefault(); createGroupMutation.mutate(newGroupName); }} className="p-6 md:p-8 space-y-6">
-              <h3 className="text-xl font-bold text-white">Create Payment Group</h3>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Group Name</label>
-                <input 
-                  type="text" 
-                  value={newGroupName}
-                  onChange={(e) => setNewGroupName(e.target.value)}
-                  placeholder="e.g. Roommates Flat 4B" 
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-primary transition-colors"
-                  required
-                />
-              </div>
-              <button 
-                type="submit" 
-                disabled={createGroupMutation.isPending}
-                className="w-full py-3.5 bg-primary hover:bg-blue-600 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-primary/20"
-              >
-                {createGroupMutation.isPending ? 'Creating...' : 'Create Group'}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Join Group Modal */}
-      {isJoinGroupModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
-          <div className="bg-neutral-900 border border-white/10 rounded-[28px] w-full max-w-md overflow-hidden shadow-2xl relative">
-            <button 
-              onClick={() => setIsJoinGroupModalOpen(false)}
-              className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
-            >
-              <X size={18} />
-            </button>
-            <form onSubmit={(e) => { e.preventDefault(); joinGroupMutation.mutate(joinInviteCode); }} className="p-6 md:p-8 space-y-6">
-              <h3 className="text-xl font-bold text-white">Join Payment Group</h3>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Invite Code</label>
-                <input 
-                  type="text" 
-                  value={joinInviteCode}
-                  onChange={(e) => setJoinInviteCode(e.target.value)}
-                  placeholder="6-character code (e.g. ax42d8)" 
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-primary transition-colors font-mono uppercase"
-                  maxLength={10}
-                  required
-                />
-              </div>
-              <button 
-                type="submit" 
-                disabled={joinGroupMutation.isPending}
-                className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-emerald-500/20"
-              >
-                {joinGroupMutation.isPending ? 'Joining...' : 'Join Group'}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Add Expense Modal */}
       {isCreateExpenseModalOpen && (
