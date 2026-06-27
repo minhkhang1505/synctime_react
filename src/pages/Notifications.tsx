@@ -1,10 +1,22 @@
+import { useEffect } from 'react';
 import { useNotificationStore } from '../store/useNotificationStore';
 import { Check, Trash2, Bell } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 
 export function Notifications() {
-  const { notifications, markAsRead, markAllAsRead, clearNotifications } = useNotificationStore();
+  const { 
+    notifications, 
+    isLoading, 
+    fetchNotifications, 
+    markAsRead, 
+    markAllAsRead, 
+    clearNotifications 
+  } = useNotificationStore();
+
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications]);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
@@ -19,15 +31,17 @@ export function Notifications() {
         
         <div className="flex items-center gap-3">
           <button
-            onClick={markAllAsRead}
+            onClick={() => markAllAsRead()}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 transition-all border border-white/5"
+            disabled={notifications.length === 0}
           >
             <Check size={18} />
             <span className="text-sm font-medium">Mark all read</span>
           </button>
           <button
-            onClick={clearNotifications}
+            onClick={() => clearNotifications()}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-all border border-red-500/10"
+            disabled={notifications.length === 0}
           >
             <Trash2 size={18} />
             <span className="text-sm font-medium">Clear all</span>
@@ -36,7 +50,11 @@ export function Notifications() {
       </div>
 
       <div className="space-y-4">
-        {notifications.length === 0 ? (
+        {isLoading ? (
+          <div className="flex justify-center py-20">
+            <div className="w-10 h-10 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
+          </div>
+        ) : notifications.length === 0 ? (
           <div className="text-center py-20 glass rounded-3xl border border-white/5">
             <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-4">
               <Bell className="text-gray-500" size={24} />

@@ -4,7 +4,9 @@ export interface Group {
   id: string;
   name: string;
   invite_code: string;
+  created_by: string;
   created_at: string;
+  updated_at: string;
 }
 
 export interface Profile {
@@ -17,6 +19,7 @@ export interface GroupMember {
   group_id: string;
   user_id: string;
   joined_at: string;
+  role: 'owner' | 'admin' | 'member';
   profiles: Profile;
 }
 
@@ -39,7 +42,7 @@ export async function createGroup(name: string): Promise<Group> {
 
   const { data, error } = await supabase
     .from('groups')
-    .insert([{ name }])
+    .insert([{ name, created_by: user.id }])
     .select()
     .single();
 
@@ -47,7 +50,7 @@ export async function createGroup(name: string): Promise<Group> {
 
   const { error: memberError } = await supabase
     .from('group_members')
-    .insert([{ group_id: data.id, user_id: user.id }]);
+    .insert([{ group_id: data.id, user_id: user.id, role: 'owner' }]);
     
   if (memberError) throw memberError;
 

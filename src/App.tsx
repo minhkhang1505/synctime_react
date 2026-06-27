@@ -26,7 +26,7 @@ function App() {
               <Route path="availability/:id" element={<Availability />} />
               <Route path="match/:id" element={<Match />} />
               <Route path="notifications" element={<Notifications />} />
-              <Route path="rotation" element={<Rotation />} />
+              <Route path="payments" element={<Rotation />} />
               <Route path="settings" element={<div className="p-4 text-center text-gray-400 mt-20">Settings coming soon</div>} />
             </Route>
           </Routes>

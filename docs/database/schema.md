@@ -8,14 +8,25 @@ Define the data structures, relationships, security policies (RLS), and optimiza
 erDiagram
     PROFILES ||--o{ GROUP_MEMBERS : "has"
     PROFILES ||--o{ AVAILABILITY_SLOTS : "has"
-    PROFILES ||--o{ ROTATION_LOGS : "has"
+    PROFILES ||--o{ EXPENSES : "creates"
+    PROFILES ||--o{ PAYMENT_LOGS : "makes"
+    PROFILES ||--o{ NOTIFICATIONS : "receives"
+    PROFILES ||--o{ ACTIVITY_LOGS : "logs activity"
+    
     GROUPS ||--o{ GROUP_MEMBERS : "has"
-    GROUPS ||--o{ ROTATION_LOGS : "has"
+    GROUPS ||--o{ EXPENSES : "contains"
+    GROUPS ||--o{ NOTIFICATIONS : "associates"
+    GROUPS ||--o{ ACTIVITY_LOGS : "contains"
+    
+    EXPENSES ||--o{ PAYMENT_LOGS : "has"
+
     GROUPS {
         uuid id PK
         string name
-        string invite_code
+        string invite_code "UNIQUE"
+        uuid created_by FK "matches profiles.id"
         timestamp created_at
+        timestamp updated_at
     }
     PROFILES {
         uuid id PK "matches auth.users.id"
@@ -24,8 +35,9 @@ erDiagram
         string avatar_url
     }
     GROUP_MEMBERS {
-        uuid group_id PK, FK
-        uuid user_id PK, FK
+        uuid group_id PK, FK "matches groups.id"
+        uuid user_id PK, FK "matches profiles.id"
+        string role "owner, admin, member"
         timestamp joined_at
     }
     AVAILABILITY_SLOTS {
@@ -36,24 +48,57 @@ erDiagram
         time start_time
         time end_time
         timestamp updated_at
+        CONSTRAINT fk_availability_slots_group_member "FOREIGN KEY (group_id, user_id) REFERENCES group_members(group_id, user_id)"
+        CONSTRAINT unique_user_availability_slot "UNIQUE(group_id, user_id, available_date, start_time, end_time)"
     }
-    ROTATION_LOGS {
+    EXPENSES {
         uuid id PK
-        uuid group_id FK
-        uuid user_id FK
-        date tracked_date
-        text notes
-        timestamp tracked_at
+        uuid group_id FK "matches groups.id"
+        string title
+        numeric amount "amount >= 0"
+        uuid created_by FK "matches profiles.id"
+        timestamp created_at
+        timestamp updated_at
+    }
+    PAYMENT_LOGS {
+        uuid id PK
+        uuid expense_id FK "matches expenses.id"
+        uuid user_id FK "matches profiles.id"
+        timestamp paid_at
+        text note
+        timestamp created_at
+        CONSTRAINT unique_user_expense_payment "UNIQUE(expense_id, user_id)"
+    }
+    NOTIFICATIONS {
+        uuid id PK
+        uuid user_id FK "matches profiles.id (recipient)"
+        uuid group_id FK "matches groups.id"
+        uuid actor_id FK "matches profiles.id (actor)"
+        string type "USER_JOINED, USER_LEFT, AVAILABLE_UPDATED, PAYMENT_MARKED"
+        jsonb payload
+        boolean is_read
+        timestamp created_at
+    }
+    ACTIVITY_LOGS {
+        uuid id PK
+        uuid group_id FK "matches groups.id"
+        uuid actor_id FK "matches profiles.id"
+        string action "CREATE_GROUP, USER_JOINED, USER_LEFT, UPDATE_AVAILABILITY, CREATE_EXPENSE, PAYMENT_MARKED"
+        string entity
+        uuid entity_id
         timestamp created_at
     }
 ```
 
 ## 3. Table Explanations
 - **`profiles`**: Stores user information. Automatically populated via database trigger when a new user signs up in `auth.users`.
-- **`groups`**: Stores group details and a unique `invite_code` for sharing.
-- **`group_members`**: Junction table linking users to groups.
-- **`availability_slots`**: Stores time ranges when a user is free. Linked to both `user_id` and `group_id` so users can have different availability per group.
-- **`rotation_logs`**: Stores log records for member rotation tracking, recording which member tracked in which group, on what date, at what time, and with optional description notes.
+- **`groups`**: Stores group details, the creator (`created_by`), and a unique `invite_code` for sharing.
+- **`group_members`**: Junction table linking users to groups, including their `role` (owner, admin, member).
+- **`availability_slots`**: Stores time ranges when a user is free. Verified by foreign key constraint to ensure they are active group members.
+- **`expenses`**: Groups shared expenses (e.g. rent, internet, electricity) with amount and creator details.
+- **`payment_logs`**: Records payment confirmations where users manually declare they paid a specific expense.
+- **`notifications`**: User-specific notification records generated automatically on group events.
+- **`activity_logs`**: Audit logs capturing all major modifications inside groups for history and debugging.
 
 ## 4. Row Level Security (RLS) Strategy
 - **`profiles`**:
@@ -68,11 +113,22 @@ erDiagram
 - **`availability_slots`**:
   - `SELECT`: Users can view availability of members in the same group.
   - `INSERT/UPDATE/DELETE`: Users can only modify their own slots (`auth.uid() = user_id`).
+- **`expenses`**:
+  - `SELECT`/`INSERT`: Group members can view/insert expenses.
+  - `UPDATE`/`DELETE`: Expense creators or group owners/admins can modify.
+- **`payment_logs`**:
+  - `SELECT`/`INSERT`: Group members can view/insert their own payments.
+  - `DELETE`: Payment log creators can remove.
+- **`notifications`**:
+  - `SELECT`/`UPDATE`/`DELETE`: Users can manage their own notification records (`user_id = auth.uid()`).
+- **`activity_logs`**:
+  - `SELECT`: Group members can view activity logs for groups they belong to.
+  - `INSERT`/`UPDATE`/`DELETE`: Database triggers only.
 
-## 5. Index Suggestions
-- `CREATE INDEX idx_group_members_user_id ON group_members(user_id);`
-- `CREATE INDEX idx_availability_group_date ON availability_slots(group_id, available_date);` (Optimizes querying common free times for a specific group and date).
+## 5. Optimization Indexes
+- `idx_availability_slots_group_date`: Optimizes query of free times on group & date.
+- `idx_notifications_user_created`: Optimizes loading of user's unread notifications feed sorted by date.
+- `idx_payment_logs_expense_id`: Optimizes list of payments for an expense.
 
 ## 6. Realtime Subscription Strategy
-- Enable Supabase Realtime on `availability_slots` table.
-- Clients subscribe to `availability_slots` changes where `group_id = current_group_id`.
+- Enable Supabase Realtime on `availability_slots` (for calendar sync), `payment_logs`/`expenses` (for payment dashboard updates), and `notifications` (for real-time toast alerts).

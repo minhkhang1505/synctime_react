@@ -7,39 +7,30 @@ import {
   joinRotationGroup,
   fetchRotationGroupMembers, 
   addRotationMockMember,
-  fetchRotationLogs, 
-  saveRotationLog, 
-  deleteRotationLog, 
+  fetchExpenses,
+  createExpense,
+  deleteExpense,
+  fetchPaymentLogs,
+  markAsPaid,
+  unmarkAsPaid,
+  subscribeToPayments,
   isRotationLocalOnly,
-  subscribeToRotationLogs
+  Expense
 } from '../features/groups/api/rotation-api';
+import { format, parseISO } from 'date-fns';
 import { 
-  format, 
-  addMonths, 
-  subMonths, 
-  startOfMonth, 
-  endOfMonth, 
-  eachDayOfInterval, 
-  getDay, 
-  isSameDay, 
-  isToday, 
-  parseISO 
-} from 'date-fns';
-import { 
-  RotateCw, 
+  CreditCard, 
   Users, 
-  Calendar as CalendarIcon, 
   Plus, 
   Trash2, 
   Copy, 
-  ChevronLeft, 
-  ChevronRight, 
-  User, 
-  ClipboardList, 
   AlertTriangle,
   History,
   UserPlus,
-  PlusCircle
+  DollarSign,
+  CheckCircle2,
+  X,
+  FileText
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -48,27 +39,28 @@ export function Rotation() {
   const queryClient = useQueryClient();
 
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   
-  // Custom Modals State for Rotation Groups
+  // Modal states
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
   const [isJoinGroupModalOpen, setIsJoinGroupModalOpen] = useState(false);
-  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
-  const [isDayDetailsOpen, setIsDayDetailsOpen] = useState(false);
+  const [isCreateExpenseModalOpen, setIsCreateExpenseModalOpen] = useState(false);
   const [isMockMemberModalOpen, setIsMockMemberModalOpen] = useState(false);
+  const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   
-  // Forms State
+  // Forms states
   const [newGroupName, setNewGroupName] = useState('');
   const [joinInviteCode, setJoinInviteCode] = useState('');
   const [mockMemberName, setMockMemberName] = useState('');
-  const [logFormUserId, setLogFormUserId] = useState<string>('');
-  const [logFormNotes, setLogFormNotes] = useState<string>('');
-  const [logFormDate, setLogFormDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+  const [expenseTitle, setExpenseTitle] = useState('');
+  const [expenseAmount, setExpenseAmount] = useState('');
+  
+  // Active payment state
+  const [activeExpenseId, setActiveExpenseId] = useState<string>('');
+  const [paymentNote, setPaymentNote] = useState('');
 
-  // 1. Fetch user's rotation groups
+  // 1. Fetch user's groups
   const { data: groups, isLoading: isGroupsLoading } = useQuery({
-    queryKey: ['rotation_groups'],
+    queryKey: ['payments_groups'],
     queryFn: fetchUserRotationGroups,
     enabled: !!user
   });
@@ -84,24 +76,32 @@ export function Rotation() {
 
   // 2. Fetch members of the selected group
   const { data: members, isLoading: isMembersLoading } = useQuery({
-    queryKey: ['rotation_members', selectedGroupId],
+    queryKey: ['payments_members', selectedGroupId],
     queryFn: () => fetchRotationGroupMembers(selectedGroupId),
     enabled: !!selectedGroupId
   });
 
-  // 3. Fetch rotation logs
-  const { data: logs, isLoading: isLogsLoading } = useQuery({
-    queryKey: ['rotation_logs', selectedGroupId],
-    queryFn: () => fetchRotationLogs(selectedGroupId),
+  // 3. Fetch expenses
+  const { data: expenses, isLoading: isExpensesLoading } = useQuery({
+    queryKey: ['payments_expenses', selectedGroupId],
+    queryFn: () => fetchExpenses(selectedGroupId),
     enabled: !!selectedGroupId
   });
 
-  // Real-time subscription to rotation logs
+  // 4. Fetch payment logs
+  const { data: paymentLogs, isLoading: isPaymentLogsLoading } = useQuery({
+    queryKey: ['payments_logs', selectedGroupId],
+    queryFn: () => fetchPaymentLogs(selectedGroupId),
+    enabled: !!selectedGroupId
+  });
+
+  // Real-time subscription to payments and expenses
   useEffect(() => {
     if (!selectedGroupId || isRotationLocalOnly()) return;
 
-    const subscription = subscribeToRotationLogs(selectedGroupId, () => {
-      queryClient.invalidateQueries({ queryKey: ['rotation_logs', selectedGroupId] });
+    const subscription = subscribeToPayments(selectedGroupId, () => {
+      queryClient.invalidateQueries({ queryKey: ['payments_expenses', selectedGroupId] });
+      queryClient.invalidateQueries({ queryKey: ['payments_logs', selectedGroupId] });
     });
 
     return () => {
@@ -113,11 +113,11 @@ export function Rotation() {
   const createGroupMutation = useMutation({
     mutationFn: createRotationGroup,
     onSuccess: (newGroup) => {
-      queryClient.invalidateQueries({ queryKey: ['rotation_groups'] });
+      queryClient.invalidateQueries({ queryKey: ['payments_groups'] });
       setSelectedGroupId(newGroup.id);
       setIsCreateGroupModalOpen(false);
       setNewGroupName('');
-      toast.success('Rotation group created!');
+      toast.success('Payment group created!');
     },
     onError: (err: any) => {
       toast.error(err.message || 'Failed to create group');
@@ -127,7 +127,7 @@ export function Rotation() {
   const joinGroupMutation = useMutation({
     mutationFn: joinRotationGroup,
     onSuccess: (joinedGroup) => {
-      queryClient.invalidateQueries({ queryKey: ['rotation_groups'] });
+      queryClient.invalidateQueries({ queryKey: ['payments_groups'] });
       setSelectedGroupId(joinedGroup.id);
       setIsJoinGroupModalOpen(false);
       setJoinInviteCode('');
@@ -141,7 +141,7 @@ export function Rotation() {
   const addMockMemberMutation = useMutation({
     mutationFn: (name: string) => addRotationMockMember(selectedGroupId, name),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rotation_members', selectedGroupId] });
+      queryClient.invalidateQueries({ queryKey: ['payments_members', selectedGroupId] });
       setIsMockMemberModalOpen(false);
       setMockMemberName('');
       toast.success('Mock member added locally!');
@@ -151,110 +151,57 @@ export function Rotation() {
     }
   });
 
-  const addLogMutation = useMutation({
-    mutationFn: ({ date, notes, targetUserId }: { date: string; notes: string; targetUserId?: string }) => 
-      saveRotationLog(selectedGroupId, date, notes, targetUserId),
+  const addExpenseMutation = useMutation({
+    mutationFn: ({ title, amount }: { title: string; amount: number }) => 
+      createExpense(selectedGroupId, title, amount),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rotation_logs', selectedGroupId] });
-      toast.success('Turn logged successfully!');
-      setIsLogModalOpen(false);
-      setLogFormNotes('');
+      queryClient.invalidateQueries({ queryKey: ['payments_expenses', selectedGroupId] });
+      toast.success('Expense created successfully!');
+      setIsCreateExpenseModalOpen(false);
+      setExpenseTitle('');
+      setExpenseAmount('');
     },
     onError: (err: any) => {
-      toast.error(err.message || 'Failed to log turn');
+      toast.error(err.message || 'Failed to create expense');
     }
   });
 
-  const deleteLogMutation = useMutation({
-    mutationFn: (logId: string) => deleteRotationLog(logId, selectedGroupId),
+  const deleteExpenseMutation = useMutation({
+    mutationFn: (expenseId: string) => deleteExpense(expenseId, selectedGroupId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rotation_logs', selectedGroupId] });
-      toast.success('Log entry deleted');
+      queryClient.invalidateQueries({ queryKey: ['payments_expenses', selectedGroupId] });
+      queryClient.invalidateQueries({ queryKey: ['payments_logs', selectedGroupId] });
+      toast.success('Expense deleted');
     },
     onError: (err: any) => {
-      toast.error(err.message || 'Failed to delete log entry');
+      toast.error(err.message || 'Failed to delete expense');
     }
   });
 
-  // Helper to map profiles
-  const getProfileForLog = (log: any) => {
-    if (log.profiles) return log.profiles;
-    const member = members?.find(m => m.user_id === log.user_id);
-    if (member) return member.profiles;
-    return {
-      id: log.user_id,
-      full_name: log.user_id === user?.id ? 'You' : 'Unknown Member',
-      avatar_url: null
-    };
-  };
+  const markPaidMutation = useMutation({
+    mutationFn: ({ expenseId, note }: { expenseId: string; note?: string }) => 
+      markAsPaid(expenseId, note),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payments_logs', selectedGroupId] });
+      toast.success('Payment recorded successfully!');
+      setIsPayModalOpen(false);
+      setPaymentNote('');
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to record payment');
+    }
+  });
 
-  // Stats calculation
-  const getStats = () => {
-    if (!members || !logs) return [];
-    
-    const counts: Record<string, number> = {};
-    const lastActive: Record<string, string> = {};
-    
-    members.forEach(m => {
-      counts[m.user_id] = 0;
-      lastActive[m.user_id] = '';
-    });
-
-    logs.forEach(log => {
-      if (counts[log.user_id] !== undefined) {
-        counts[log.user_id]++;
-      }
-      if (!lastActive[log.user_id] || new Date(log.tracked_at) > new Date(lastActive[log.user_id])) {
-        lastActive[log.user_id] = log.tracked_at;
-      }
-    });
-
-    return members.map(m => {
-      return {
-        member: m,
-        count: counts[m.user_id] || 0,
-        lastActive: lastActive[m.user_id] || null
-      };
-    }).sort((a, b) => {
-      if (a.count !== b.count) return a.count - b.count;
-      if (!a.lastActive) return -1;
-      if (!b.lastActive) return 1;
-      return new Date(a.lastActive).getTime() - new Date(b.lastActive).getTime();
-    });
-  };
-
-  const stats = getStats();
-  const nextUp = stats.length > 0 ? stats[0] : null;
-
-  // Calendar calculations
-  const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(monthStart);
-  const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
-  
-  const startDayOfWeekIndex = (getDay(monthStart) + 6) % 7; 
-  const calendarPadding = Array(startDayOfWeekIndex).fill(null);
-
-  const getLogsForDate = (date: Date) => {
-    if (!logs) return [];
-    const dateStr = format(date, 'yyyy-MM-dd');
-    return logs.filter(log => log.tracked_date === dateStr);
-  };
-
-  // Get logs for the current selected month
-  const getLogsForSelectedMonth = () => {
-    if (!logs) return [];
-    return logs.filter(log => {
-      try {
-        const logDate = parseISO(log.tracked_date);
-        return logDate.getMonth() === currentMonth.getMonth() && 
-               logDate.getFullYear() === currentMonth.getFullYear();
-      } catch (e) {
-        return false;
-      }
-    }).sort((a, b) => b.tracked_date.localeCompare(a.tracked_date) || new Date(b.tracked_at).getTime() - new Date(a.tracked_at).getTime()); // Sort newest day first
-  };
-
-  const monthlyLogs = getLogsForSelectedMonth();
+  const unmarkPaidMutation = useMutation({
+    mutationFn: (expenseId: string) => unmarkAsPaid(expenseId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payments_logs', selectedGroupId] });
+      toast.success('Payment confirmation removed');
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to undo payment');
+    }
+  });
 
   const copyInviteCode = () => {
     if (!selectedGroup) return;
@@ -262,27 +209,59 @@ export function Rotation() {
     toast.success('Invite code copied!');
   };
 
-  const handleOpenLogModal = (date?: Date) => {
-    if (date) {
-      setLogFormDate(format(date, 'yyyy-MM-dd'));
-    } else {
-      setLogFormDate(format(new Date(), 'yyyy-MM-dd'));
+  const handleExpenseSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amountNum = parseFloat(expenseAmount);
+    if (!expenseTitle || isNaN(amountNum) || amountNum <= 0) {
+      toast.error('Please enter a valid title and amount');
+      return;
     }
-    setLogFormUserId(user?.id || '');
-    setIsLogModalOpen(true);
+    addExpenseMutation.mutate({ title: expenseTitle, amount: amountNum });
   };
 
-  const handleLogSubmit = (e: React.FormEvent) => {
+  const handleOpenPayModal = (expenseId: string) => {
+    setActiveExpenseId(expenseId);
+    setPaymentNote('');
+    setIsPayModalOpen(true);
+  };
+
+  const handlePaySubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedGroupId) return;
-    addLogMutation.mutate({
-      date: logFormDate,
-      notes: logFormNotes,
-      targetUserId: logFormUserId || undefined
-    });
+    if (!activeExpenseId) return;
+    markPaidMutation.mutate({ expenseId: activeExpenseId, note: paymentNote });
+  };
+
+  // Helper to map profiles
+  const getProfileForLog = (userId: string) => {
+    const member = members?.find(m => m.user_id === userId);
+    if (member) return member.profiles;
+    return {
+      id: userId,
+      full_name: userId === user?.id ? 'You' : 'Unknown Member',
+      avatar_url: null
+    };
   };
 
   const isLocalOnly = isRotationLocalOnly();
+
+  // Calculations for Expense metrics
+  const getExpenseMetrics = (expense: Expense) => {
+    const totalMembers = members?.length || 1;
+    const shareAmount = expense.amount / totalMembers;
+    const payments = paymentLogs?.filter(p => p.expense_id === expense.id) || [];
+    const paidMemberIds = payments.map(p => p.user_id);
+    const hasPaid = paidMemberIds.includes(user?.id || '');
+    const paidCount = payments.length;
+    
+    return {
+      shareAmount,
+      paidMemberIds,
+      hasPaid,
+      paidCount,
+      totalCount: totalMembers,
+      progressPercent: (paidCount / totalMembers) * 100
+    };
+  };
 
   if (isGroupsLoading) {
     return (
@@ -299,7 +278,7 @@ export function Rotation() {
         <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex gap-3 text-amber-400 text-xs md:text-sm items-start shadow-lg">
           <AlertTriangle className="shrink-0 w-5 h-5 mt-0.5" />
           <div>
-            <span className="font-bold">Offline Mode (LocalStorage):</span> Tables are not configured in Supabase. Groups and logs are stored locally. Check <a href="file:///Users/nguyenminhkhang/Documents/react/group-scheduler/docs/database/rotation_logs.sql" className="underline font-bold">rotation_logs.sql</a> to enable cloud sync.
+            <span className="font-bold">Offline Mode (LocalStorage):</span> Payments tables are not configured in Supabase. Expenses and logs are stored locally. Apply the migration in <a href="file:///Users/nguyenminhkhang/Documents/react/group-scheduler/docs/database/migration.sql" className="underline font-bold">migration.sql</a> to enable cloud sync.
           </div>
         </div>
       )}
@@ -308,10 +287,10 @@ export function Rotation() {
       <div className="mt-6 md:mt-2 mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl md:text-5xl font-bold tracking-tight mb-2 flex items-center gap-3">
-            <RotateCw size={36} className="text-primary animate-spin-slow" />
-            Rotation Tracker
+            <CreditCard size={36} className="text-primary animate-pulse" />
+            Payment Tracker
           </h2>
-          <p className="text-gray-400 text-sm md:text-lg">Track chores or duties in rotation groups separate from availability groups.</p>
+          <p className="text-gray-400 text-sm md:text-lg">Track group bills, split expenses, and verify member payments manually.</p>
         </div>
 
         <div className="flex flex-wrap gap-2.5">
@@ -336,13 +315,13 @@ export function Rotation() {
             onClick={() => setIsJoinGroupModalOpen(true)}
             className="p-3 bg-white/5 border border-white/10 text-emerald-400 hover:text-emerald-300 hover:bg-white/10 transition-colors rounded-2xl text-sm font-bold flex items-center gap-2 shadow-lg"
           >
-            Join Rotation Group
+            Join Group
           </button>
           <button
             onClick={() => setIsCreateGroupModalOpen(true)}
             className="p-3 bg-primary hover:bg-blue-600 transition-colors text-white rounded-2xl text-sm font-bold flex items-center gap-2 shadow-lg shadow-primary/20"
           >
-            <Plus size={16} /> New Rotation Group
+            <Plus size={16} /> New Group
           </button>
         </div>
       </div>
@@ -351,10 +330,10 @@ export function Rotation() {
         // No group selected/created state
         <div className="glass p-10 md:p-20 rounded-[32px] text-center border border-white/5 shadow-2xl mt-10 max-w-2xl mx-auto">
           <div className="w-20 h-20 rounded-full bg-white/5 mx-auto flex items-center justify-center mb-6 border border-white/10">
-            <ClipboardList size={36} className="text-gray-500" />
+            <DollarSign size={36} className="text-gray-500" />
           </div>
-          <h3 className="text-2xl font-bold mb-4">No Rotation Groups Found</h3>
-          <p className="text-gray-400 mb-8 max-w-md mx-auto">Create a rotation group or join one to begin logging turns independently from matching group times.</p>
+          <h3 className="text-2xl font-bold mb-4">No Groups Found</h3>
+          <p className="text-gray-400 mb-8 max-w-md mx-auto">Create a group or join one to begin adding shared bills and split expenses.</p>
           <div className="flex gap-4 justify-center">
             <button 
               onClick={() => setIsJoinGroupModalOpen(true)} 
@@ -371,10 +350,10 @@ export function Rotation() {
           </div>
         </div>
       ) : (
-        // Group Dashboard
+        // Group Payments Dashboard
         <div className="grid lg:grid-cols-12 gap-8 items-start">
           
-          {/* Calendar view (Left column - 7cols) */}
+          {/* Expenses Board (Left Column - 7cols) */}
           <div className="lg:col-span-7 flex flex-col gap-6">
             
             {/* Group details card */}
@@ -387,7 +366,6 @@ export function Rotation() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h4 className="font-bold text-lg text-white leading-tight">{selectedGroup.name}</h4>
-                      <span className="text-[10px] bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Rotation Group</span>
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">{members?.length || 0} members active</p>
                   </div>
@@ -410,187 +388,153 @@ export function Rotation() {
                       className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500/20 text-indigo-400 transition-colors active:scale-95 text-xs font-bold flex items-center gap-1.5"
                       title="Add mock user for local testing"
                     >
-                      <UserPlus size={15} /> Add Mock Member
+                      <UserPlus size={15} /> Add Member
                     </button>
                   )}
                 </div>
               </div>
             )}
 
-            {/* Monthly Calendar Card */}
-            <div className="glass rounded-[28px] p-5 md:p-8 border border-white/5 shadow-2xl relative overflow-hidden">
+            {/* Expenses List Card */}
+            <div className="glass rounded-[28px] p-6 md:p-8 border border-white/5 shadow-2xl relative overflow-hidden">
               <div className="absolute -top-16 -right-16 w-48 h-48 bg-primary/10 blur-[60px] rounded-full"></div>
               
-              {/* Calendar month controls */}
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl md:text-2xl font-black text-white uppercase tracking-wider">
-                  {format(currentMonth, 'MMMM yyyy')}
+              <div className="flex items-center justify-between mb-6 relative z-10">
+                <h3 className="text-xl md:text-2xl font-black text-white uppercase tracking-wider flex items-center gap-2">
+                  <FileText size={22} className="text-gray-400" />
+                  Active Expenses
                 </h3>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => setCurrentMonth(prev => subMonths(prev, 1))}
-                    className="p-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-gray-300 transition-colors"
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-                  <button 
-                    onClick={() => setCurrentMonth(new Date())}
-                    className="px-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-gray-300 text-xs font-bold transition-colors"
-                  >
-                    Today
-                  </button>
-                  <button 
-                    onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}
-                    className="p-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-gray-300 transition-colors"
-                  >
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
+                <button
+                  onClick={() => setIsCreateExpenseModalOpen(true)}
+                  className="px-4 py-2.5 bg-primary hover:bg-blue-600 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
+                >
+                  <Plus size={14} /> Add Expense
+                </button>
               </div>
 
-              {/* Calendar Grid */}
-              <div className="grid grid-cols-7 gap-2 text-center mb-2">
-                {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, idx) => (
-                  <span key={idx} className="text-[10px] md:text-xs font-black text-gray-500 uppercase tracking-widest py-2">
-                    {day}
-                  </span>
-                ))}
-              </div>
-
-              {isLogsLoading ? (
+              {isExpensesLoading ? (
                 <div className="h-64 flex items-center justify-center">
                   <div className="w-8 h-8 rounded-full border-3 border-primary border-t-transparent animate-spin"></div>
                 </div>
+              ) : !expenses || expenses.length === 0 ? (
+                <div className="text-center py-20 bg-black/10 rounded-2xl border border-white/5">
+                  <p className="text-gray-400 font-medium">No expenses created yet for this group.</p>
+                  <p className="text-xs text-gray-500 mt-1">Tap Add Expense above to split your first bill!</p>
+                </div>
               ) : (
-                <div className="grid grid-cols-7 gap-2.5">
-                  {/* Padding items */}
-                  {calendarPadding.map((_, idx) => (
-                    <div key={`pad-${idx}`} className="aspect-square opacity-0 pointer-events-none"></div>
-                  ))}
-
-                  {/* Day items */}
-                  {monthDays.map((day, idx) => {
-                    const dayLogs = getLogsForDate(day);
-                    const isDaySelected = isSameDay(day, selectedDate);
-                    const isDayToday = isToday(day);
-                    const hasLogs = dayLogs.length > 0;
+                <div className="space-y-4">
+                  {expenses.map((expense) => {
+                    const { shareAmount, hasPaid, paidCount, totalCount, progressPercent, paidMemberIds } = getExpenseMetrics(expense);
+                    const creator = getProfileForLog(expense.created_by);
+                    const isCreator = expense.created_by === user?.id;
 
                     return (
-                      <button
-                        key={idx}
-                        onClick={() => {
-                          setSelectedDate(day);
-                          if (hasLogs) {
-                            setIsDayDetailsOpen(true);
-                          } else {
-                            handleOpenLogModal(day);
-                          }
-                        }}
-                        className={`
-                          aspect-square rounded-2xl border transition-all flex flex-col justify-between p-2 relative group overflow-hidden
-                          ${isDaySelected 
-                            ? 'bg-primary border-primary text-white shadow-lg shadow-primary/25 scale-[1.03]' 
-                            : isDayToday
-                              ? 'bg-white/10 border-white/20 text-white font-bold'
-                              : 'bg-black/25 border-white/5 text-gray-300 hover:bg-white/5 hover:border-white/10'
-                          }
-                          ${hasLogs && !isDaySelected ? 'border-primary/45 shadow-[0_0_12px_rgba(59,130,246,0.15)] bg-primary/10' : ''}
-                        `}
-                      >
-                        <span className={`text-[11px] md:text-sm font-bold ${isDaySelected ? 'text-white' : ''}`}>
-                          {format(day, 'd')}
-                        </span>
+                      <div key={expense.id} className="bg-black/30 border border-white/5 rounded-2xl p-5 hover:bg-black/40 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex-1 space-y-2.5">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <h4 className="font-extrabold text-white text-lg">{expense.title}</h4>
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                Added by {creator.full_name || 'Member'} on {format(parseISO(expense.created_at), 'MMM d, yyyy')}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-xl font-black text-primary block">${expense.amount.toFixed(2)}</span>
+                              <span className="text-[10px] bg-white/5 border border-white/10 px-2 py-0.5 rounded-md text-gray-400 font-semibold inline-block mt-0.5">
+                                ${shareAmount.toFixed(2)} each
+                              </span>
+                            </div>
+                          </div>
 
-                        {hasLogs && (
-                          <div className="flex -space-x-1.5 self-end mt-auto max-w-full">
-                            {dayLogs.slice(0, 3).map((log) => {
-                              const profile = getProfileForLog(log);
-                              return (
-                                <div 
-                                  key={log.id} 
-                                  className={`w-4 h-4 md:w-5 md:h-5 rounded-full border border-neutral-900 overflow-hidden shrink-0 flex items-center justify-center bg-gray-600 text-[8px] font-bold text-white uppercase`}
-                                  title={`${profile.full_name || 'Member'}`}
-                                >
-                                  {profile.avatar_url ? (
-                                    <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
-                                  ) : (
-                                    profile.full_name?.charAt(0) || '?'
-                                  )}
-                                </div>
-                              );
-                            })}
-                            {dayLogs.length > 3 && (
-                              <div className="w-4 h-4 md:w-5 md:h-5 rounded-full border border-neutral-900 bg-neutral-800 text-[8px] font-black text-gray-300 flex items-center justify-center shrink-0">
-                                +{dayLogs.length - 3}
-                              </div>
+                          {/* Progress bar */}
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs font-bold text-gray-400">
+                              <span>Payment Progress</span>
+                              <span>{paidCount} of {totalCount} paid</span>
+                            </div>
+                            <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden border border-white/5">
+                              <div 
+                                className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-500" 
+                                style={{ width: `${progressPercent}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* List of payers avatars */}
+                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mr-1">Paid by:</span>
+                            {paidCount === 0 ? (
+                              <span className="text-xs text-gray-500 italic">No one yet</span>
+                            ) : (
+                              members?.map(m => {
+                                const didPay = paidMemberIds.includes(m.user_id);
+                                if (!didPay) return null;
+                                return (
+                                  <div 
+                                    key={m.user_id} 
+                                    className="w-6 h-6 rounded-full bg-neutral-700 flex items-center justify-center text-[10px] font-black text-white uppercase border border-emerald-500/50 shadow-sm"
+                                    title={m.profiles.full_name || 'Member'}
+                                  >
+                                    {m.profiles.avatar_url ? (
+                                      <img src={m.profiles.avatar_url} alt="" className="w-full h-full object-cover rounded-full" />
+                                    ) : (
+                                      m.profiles.full_name?.charAt(0) || '?'
+                                    )}
+                                  </div>
+                                );
+                              })
                             )}
                           </div>
-                        )}
-                        
-                        <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
-                      </button>
+                        </div>
+
+                        {/* Actions block */}
+                        <div className="flex md:flex-col gap-2 shrink-0 md:w-36 justify-end items-end">
+                          {hasPaid ? (
+                            <button
+                              onClick={() => unmarkPaidMutation.mutate(expense.id)}
+                              className="flex-1 md:w-full py-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 hover:border-emerald-500/40 text-emerald-400 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all active:scale-[0.98]"
+                              title="Click to undo your payment confirmation"
+                            >
+                              <CheckCircle2 size={14} /> Paid ✓
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleOpenPayModal(expense.id)}
+                              className="flex-1 md:w-full py-2 bg-primary hover:bg-blue-600 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all active:scale-[0.98] shadow-md shadow-primary/10"
+                            >
+                              Mark as Paid
+                            </button>
+                          )}
+
+                          {isCreator && (
+                            <button
+                              onClick={() => {
+                                if (confirm('Are you sure you want to delete this expense and all its payments?')) {
+                                  deleteExpenseMutation.mutate(expense.id);
+                                }
+                              }}
+                              className="p-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 text-red-400 rounded-xl transition-all active:scale-[0.95]"
+                              title="Delete Expense"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
               )}
             </div>
-
-            {/* Quick Actions */}
-            <div className="flex gap-4">
-              <button 
-                onClick={() => handleOpenLogModal(new Date())}
-                className="flex-1 p-4 rounded-2xl bg-primary hover:bg-blue-600 text-white font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20 transition-all active:scale-[0.98]"
-              >
-                <Plus size={18} /> Log Turn Today
-              </button>
-              <button 
-                onClick={() => {
-                  setSelectedDate(new Date());
-                  handleOpenLogModal(new Date());
-                }}
-                className="flex-1 p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 text-white font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-              >
-                <CalendarIcon size={18} className="text-gray-400" /> Log Custom Date
-              </button>
-            </div>
-
           </div>
 
-          {/* Sidebar: Stats & Feed (Right column - 5cols) */}
+          {/* Sidebar: Members & Payments History (Right column - 5cols) */}
           <div className="lg:col-span-5 flex flex-col gap-6">
             
-            {/* Next Up Rotation Card */}
-            {nextUp && (
-              <div className="glass p-6 rounded-[28px] border border-primary/20 relative overflow-hidden bg-gradient-to-tr from-primary/10 to-transparent shadow-xl">
-                <div className="absolute -top-12 -right-12 w-32 h-32 bg-primary/20 blur-[50px] rounded-full"></div>
-                <h3 className="text-sm font-bold text-primary uppercase tracking-wider mb-4 flex items-center gap-2">
-                  <User size={16} /> Next in Rotation
-                </h3>
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-primary to-indigo-500 flex items-center justify-center text-white font-black text-xl border border-white/10 shadow-lg overflow-hidden shrink-0">
-                    {nextUp.member.profiles.avatar_url ? (
-                      <img src={nextUp.member.profiles.avatar_url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      nextUp.member.profiles.full_name?.charAt(0) || '?'
-                    )}
-                  </div>
-                  <div>
-                    <h4 className="font-extrabold text-lg text-white">{nextUp.member.profiles.full_name || 'Member'}</h4>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {nextUp.count === 0 
-                        ? 'Has not logged any turns yet.' 
-                        : `Logged ${nextUp.count} turns. Last active: ${nextUp.lastActive ? format(parseISO(nextUp.lastActive), 'MMM d, yyyy') : 'never'}`
-                      }
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Member stats list */}
+            {/* Members List Card */}
             <div className="glass p-6 rounded-[28px] border border-white/5 shadow-xl flex flex-col max-h-[300px]">
               <h3 className="font-bold text-lg text-white mb-4 flex items-center justify-between">
-                Rotation Members
+                Group Members
                 <span className="text-xs bg-white/10 px-2.5 py-1 rounded-full font-bold">{members?.length || 0}</span>
               </h3>
 
@@ -598,11 +542,11 @@ export function Rotation() {
                 <div className="py-10 flex justify-center">
                   <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
                 </div>
-              ) : stats.length === 0 ? (
+              ) : !members || members.length === 0 ? (
                 <p className="text-gray-500 text-sm text-center py-6">No members in this group.</p>
               ) : (
                 <div className="space-y-3 overflow-y-auto hide-scrollbar flex-1 pr-1">
-                  {stats.map(({ member, count }) => (
+                  {members.map((member) => (
                     <div key={member.user_id} className="flex items-center justify-between bg-black/20 p-3 rounded-xl border border-white/5 hover:bg-black/30 transition-colors">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-neutral-700 flex items-center justify-center text-xs font-bold text-white uppercase overflow-hidden border border-white/5">
@@ -614,8 +558,8 @@ export function Rotation() {
                         </div>
                         <span className="text-sm font-semibold text-gray-200">{member.profiles.full_name || 'Unknown User'}</span>
                       </div>
-                      <span className="text-xs font-bold bg-white/5 border border-white/10 px-3 py-1 rounded-lg text-primary">
-                        {count} turns
+                      <span className="text-[10px] font-bold bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg text-gray-400 capitalize">
+                        {member.role || 'member'}
                       </span>
                     </div>
                   ))}
@@ -626,62 +570,46 @@ export function Rotation() {
             {/* History Feed Card */}
             <div className="glass p-6 rounded-[28px] border border-white/5 shadow-xl flex flex-col max-h-[400px]">
               <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
-                <History size={18} className="text-gray-400 animate-pulse" />
-                Logs in {format(currentMonth, 'MMMM yyyy')}
-                <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full ml-auto font-bold">{monthlyLogs.length}</span>
+                <History size={18} className="text-gray-400" />
+                Recent Payments Log
+                <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full ml-auto font-bold">{paymentLogs?.length || 0}</span>
               </h3>
 
-              {isLogsLoading ? (
+              {isPaymentLogsLoading ? (
                 <div className="py-10 flex justify-center">
                   <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
                 </div>
-              ) : !monthlyLogs || monthlyLogs.length === 0 ? (
+              ) : !paymentLogs || paymentLogs.length === 0 ? (
                 <div className="text-center py-10 flex-1 flex flex-col justify-center">
-                  <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-3 border border-white/10">
-                    <ClipboardList size={20} className="text-gray-500" />
-                  </div>
-                  <p className="text-gray-400 text-sm">No logs recorded this month.</p>
+                  <p className="text-gray-500 text-sm">No payment confirmations recorded yet.</p>
                 </div>
               ) : (
                 <div className="space-y-4 overflow-y-auto hide-scrollbar flex-1 pr-1">
-                  {monthlyLogs.map(log => {
-                    const profile = getProfileForLog(log);
-                    const isOwnLog = log.user_id === user?.id;
+                  {paymentLogs.map(log => {
+                    const profile = getProfileForLog(log.user_id);
+                    const associatedExpense = expenses?.find(e => e.id === log.expense_id);
 
                     return (
-                      <div key={log.id} className="relative pl-5 border-l border-white/10 pb-1 group/item">
-                        {/* Timeline Bullet */}
-                        <div className="absolute left-[-4.5px] top-1.5 w-2 h-2 rounded-full bg-primary ring-4 ring-background"></div>
-                        
-                        <div className="flex justify-between items-start gap-2">
-                          <div>
-                            <span className="font-extrabold text-sm text-white">{profile.full_name || 'Member'}</span>
-                            <span className="text-[11px] text-gray-500 ml-2 font-medium">
-                              {format(new Date(log.tracked_at), 'MMM d, h:mm a')}
-                            </span>
-                            <p className="text-xs text-primary font-bold mt-0.5">
-                              Tracked for: {format(parseISO(log.tracked_date), 'MMMM d, yyyy')}
-                            </p>
-                            {log.notes && (
-                              <p className="text-xs bg-black/30 border border-white/5 rounded-lg p-2 mt-1.5 text-gray-400 italic">
-                                {log.notes}
-                              </p>
-                            )}
-                          </div>
-
-                          {isOwnLog && (
-                            <button
-                              onClick={() => {
-                                if (confirm('Are you sure you want to delete this log entry?')) {
-                                  deleteLogMutation.mutate(log.id);
-                                }
-                              }}
-                              className="text-gray-500 hover:text-red-400 p-1 rounded-lg hover:bg-white/5 opacity-0 group-hover/item:opacity-100 transition-opacity"
-                              title="Delete log"
-                            >
-                              <Trash2 size={13} />
-                            </button>
+                      <div key={log.id} className="flex gap-3 bg-black/20 p-3 rounded-xl border border-white/5 hover:bg-black/30 transition-colors">
+                        <div className="w-8 h-8 rounded-full bg-neutral-700 flex items-center justify-center text-xs font-bold text-white uppercase overflow-hidden border border-white/5 shrink-0">
+                          {profile.avatar_url ? (
+                            <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            profile.full_name?.charAt(0) || '?'
                           )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-gray-200">
+                            <span className="text-white font-bold">{profile.full_name || 'Someone'}</span> confirmed payment for <span className="text-primary font-bold">"{associatedExpense?.title || 'Expense'}"</span>
+                          </p>
+                          {log.note && (
+                            <p className="text-xs text-gray-400 mt-1 bg-white/5 px-2 py-1.5 rounded-lg border border-white/5 italic">
+                              "{log.note}"
+                            </p>
+                          )}
+                          <p className="text-[10px] text-gray-500 mt-1.5 font-medium">
+                            {format(parseISO(log.paid_at), 'MMM d, yyyy • h:mm a')}
+                          </p>
                         </div>
                       </div>
                     );
@@ -691,291 +619,220 @@ export function Rotation() {
             </div>
 
           </div>
-
         </div>
       )}
 
-      {/* 1. Custom Create Rotation Group Modal */}
+      {/* MODALS */}
+
+      {/* Create Group Modal */}
       {isCreateGroupModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-sm glass rounded-[32px] p-6 border border-white/10 shadow-2xl relative animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
+          <div className="bg-neutral-900 border border-white/10 rounded-[28px] w-full max-w-md overflow-hidden shadow-2xl relative">
             <button 
               onClick={() => setIsCreateGroupModalOpen(false)}
-              className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 transition-colors text-gray-400"
+              className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
             >
-              Cancel
+              <X size={18} />
             </button>
-            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-              <PlusCircle size={22} className="text-primary" />
-              New Rotation Group
-            </h2>
-            <form onSubmit={(e) => { e.preventDefault(); if (newGroupName.trim()) createGroupMutation.mutate(newGroupName); }}>
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-xs font-black text-gray-400 mb-2 uppercase tracking-widest px-1">Group Name</label>
-                  <input 
-                    type="text" 
-                    value={newGroupName}
-                    onChange={(e) => setNewGroupName(e.target.value)}
-                    placeholder="e.g. Cooking Rotation, Chores..." 
-                    className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-inner"
-                    required
-                  />
-                </div>
-                <button 
-                  type="submit" 
-                  disabled={createGroupMutation.isPending || !newGroupName.trim()}
-                  className="w-full bg-primary text-white font-medium px-4 py-4 rounded-2xl hover:bg-blue-600 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-primary/20"
-                >
-                  {createGroupMutation.isPending ? <RotateCw className="animate-spin w-5 h-5" /> : null}
-                  Create Group
-                </button>
+            <form onSubmit={(e) => { e.preventDefault(); createGroupMutation.mutate(newGroupName); }} className="p-6 md:p-8 space-y-6">
+              <h3 className="text-xl font-bold text-white">Create Payment Group</h3>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Group Name</label>
+                <input 
+                  type="text" 
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  placeholder="e.g. Roommates Flat 4B" 
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-primary transition-colors"
+                  required
+                />
               </div>
+              <button 
+                type="submit" 
+                disabled={createGroupMutation.isPending}
+                className="w-full py-3.5 bg-primary hover:bg-blue-600 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-primary/20"
+              >
+                {createGroupMutation.isPending ? 'Creating...' : 'Create Group'}
+              </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* 2. Custom Join Rotation Group Modal */}
+      {/* Join Group Modal */}
       {isJoinGroupModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-sm glass rounded-[32px] p-6 border border-white/10 shadow-2xl relative animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
+          <div className="bg-neutral-900 border border-white/10 rounded-[28px] w-full max-w-md overflow-hidden shadow-2xl relative">
             <button 
               onClick={() => setIsJoinGroupModalOpen(false)}
-              className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 transition-colors text-gray-400"
+              className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
             >
-              Cancel
+              <X size={18} />
             </button>
-            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-              <Users size={22} className="text-emerald-400" />
-              Join Rotation Group
-            </h2>
-            <form onSubmit={(e) => { e.preventDefault(); if (joinInviteCode.trim()) joinGroupMutation.mutate(joinInviteCode); }}>
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-xs font-black text-gray-400 mb-2 uppercase tracking-widest px-1">Invite Code</label>
-                  <input 
-                    type="text" 
-                    value={joinInviteCode}
-                    onChange={(e) => setJoinInviteCode(e.target.value)}
-                    placeholder="Enter the 6-character code" 
-                    className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all font-mono tracking-widest text-center shadow-inner uppercase"
-                    required
-                  />
-                </div>
-                <button 
-                  type="submit" 
-                  disabled={joinGroupMutation.isPending || !joinInviteCode.trim()}
-                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-medium px-4 py-4 rounded-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-emerald-500/20"
-                >
-                  {joinGroupMutation.isPending ? <RotateCw className="animate-spin w-5 h-5" /> : null}
-                  Join Group
-                </button>
+            <form onSubmit={(e) => { e.preventDefault(); joinGroupMutation.mutate(joinInviteCode); }} className="p-6 md:p-8 space-y-6">
+              <h3 className="text-xl font-bold text-white">Join Payment Group</h3>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Invite Code</label>
+                <input 
+                  type="text" 
+                  value={joinInviteCode}
+                  onChange={(e) => setJoinInviteCode(e.target.value)}
+                  placeholder="6-character code (e.g. ax42d8)" 
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-primary transition-colors font-mono uppercase"
+                  maxLength={10}
+                  required
+                />
               </div>
+              <button 
+                type="submit" 
+                disabled={joinGroupMutation.isPending}
+                className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-emerald-500/20"
+              >
+                {joinGroupMutation.isPending ? 'Joining...' : 'Join Group'}
+              </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* 3. Add Mock Member Modal (Offline LocalStorage mode only) */}
+      {/* Add Expense Modal */}
+      {isCreateExpenseModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
+          <div className="bg-neutral-900 border border-white/10 rounded-[28px] w-full max-w-md overflow-hidden shadow-2xl relative">
+            <button 
+              onClick={() => setIsCreateExpenseModalOpen(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
+            >
+              <X size={18} />
+            </button>
+            <form onSubmit={handleExpenseSubmit} className="p-6 md:p-8 space-y-6">
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <DollarSign size={20} className="text-primary" />
+                Add Shared Expense
+              </h3>
+              
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Expense Title</label>
+                  <input 
+                    type="text" 
+                    value={expenseTitle}
+                    onChange={(e) => setExpenseTitle(e.target.value)}
+                    placeholder="e.g. Netflix Subscription, Internet, Electricity" 
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-primary transition-colors"
+                    required
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Amount ($)</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    min="0.01"
+                    value={expenseAmount}
+                    onChange={(e) => setExpenseAmount(e.target.value)}
+                    placeholder="e.g. 15.00" 
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-primary transition-colors font-bold"
+                    required
+                  />
+                </div>
+
+                {members && members.length > 0 && (
+                  <p className="text-xs text-gray-500 bg-white/5 p-3 rounded-lg border border-white/5">
+                    Will be split equally among all <span className="text-white font-bold">{members.length}</span> members. 
+                    {expenseAmount && !isNaN(parseFloat(expenseAmount)) && (
+                      <span> Each member owes: <span className="text-primary font-bold">${(parseFloat(expenseAmount) / members.length).toFixed(2)}</span></span>
+                    )}
+                  </p>
+                )}
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={addExpenseMutation.isPending}
+                className="w-full py-3.5 bg-primary hover:bg-blue-600 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-primary/20"
+              >
+                {addExpenseMutation.isPending ? 'Adding...' : 'Add Expense'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Pay Confirmation Modal */}
+      {isPayModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
+          <div className="bg-neutral-900 border border-white/10 rounded-[28px] w-full max-w-md overflow-hidden shadow-2xl relative">
+            <button 
+              onClick={() => setIsPayModalOpen(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
+            >
+              <X size={18} />
+            </button>
+            <form onSubmit={handlePaySubmit} className="p-6 md:p-8 space-y-6">
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <CheckCircle2 size={20} className="text-emerald-400" />
+                Confirm Payment
+              </h3>
+              
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Payment Notes (Optional)</label>
+                <textarea 
+                  value={paymentNote}
+                  onChange={(e) => setPaymentNote(e.target.value)}
+                  placeholder="e.g. Sent via Venmo, paid my portion in cash" 
+                  rows={3}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-primary transition-colors resize-none"
+                />
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={markPaidMutation.isPending}
+                className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-emerald-500/20"
+              >
+                {markPaidMutation.isPending ? 'Confirming...' : 'I have Paid'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Local Mock Member Modal */}
       {isMockMemberModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-sm glass rounded-[32px] p-6 border border-white/10 shadow-2xl relative animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
+          <div className="bg-neutral-900 border border-white/10 rounded-[28px] w-full max-w-md overflow-hidden shadow-2xl relative">
             <button 
               onClick={() => setIsMockMemberModalOpen(false)}
-              className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 transition-colors text-gray-400"
+              className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
             >
-              Cancel
+              <X size={18} />
             </button>
-            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-              <UserPlus size={22} className="text-indigo-400" />
-              Add Mock Member
-            </h2>
-            <p className="text-xs text-gray-400 mb-4">Adding a member locally allows you to simulate rotations on this device without running SQL migrations.</p>
-            <form onSubmit={(e) => { e.preventDefault(); if (mockMemberName.trim()) addMockMemberMutation.mutate(mockMemberName); }}>
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-xs font-black text-gray-400 mb-2 uppercase tracking-widest px-1">Member Full Name</label>
-                  <input 
-                    type="text" 
-                    value={mockMemberName}
-                    onChange={(e) => setMockMemberName(e.target.value)}
-                    placeholder="e.g. Alice Johnson" 
-                    className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-inner"
-                    required
-                  />
-                </div>
-                <button 
-                  type="submit" 
-                  disabled={addMockMemberMutation.isPending || !mockMemberName.trim()}
-                  className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-medium px-4 py-4 rounded-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-indigo-500/20"
-                >
-                  {addMockMemberMutation.isPending ? <RotateCw className="animate-spin w-5 h-5" /> : null}
-                  Add Member
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 4. Log Turn Modal */}
-      {isLogModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-md glass rounded-[32px] p-6 border border-white/10 shadow-2xl relative animate-in zoom-in-95 duration-200">
-            <button 
-              onClick={() => setIsLogModalOpen(false)}
-              className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 transition-colors text-gray-400"
-            >
-              Cancel
-            </button>
-            <h3 className="text-2xl font-bold mb-5 flex items-center gap-2">
-              <ClipboardList size={22} className="text-primary" />
-              Log Rotation Turn
-            </h3>
-            
-            <form onSubmit={handleLogSubmit} className="space-y-5">
-              <div>
-                <label className="block text-xs font-black text-gray-400 mb-2 uppercase tracking-widest px-1">Selected Member</label>
-                <select
-                  value={logFormUserId}
-                  onChange={(e) => setLogFormUserId(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3.5 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all cursor-pointer font-bold"
-                  required
-                >
-                  <option value="" disabled className="bg-neutral-900">Select group member</option>
-                  {members?.map(m => (
-                    <option key={m.user_id} value={m.user_id} className="bg-neutral-900 text-white font-semibold">
-                      {m.profiles.full_name} {m.user_id === user?.id ? '(You)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-black text-gray-400 mb-2 uppercase tracking-widest px-1">Date of Track</label>
+            <form onSubmit={(e) => { e.preventDefault(); addMockMemberMutation.mutate(mockMemberName); }} className="p-6 md:p-8 space-y-6">
+              <h3 className="text-xl font-bold text-white">Add Mock Member (Local Only)</h3>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Member Full Name</label>
                 <input 
-                  type="date"
-                  value={logFormDate}
-                  onChange={(e) => setLogFormDate(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3.5 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all font-bold"
+                  type="text" 
+                  value={mockMemberName}
+                  onChange={(e) => setMockMemberName(e.target.value)}
+                  placeholder="e.g. Sarah Connor" 
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-primary transition-colors"
                   required
                 />
               </div>
-
-              <div>
-                <label className="block text-xs font-black text-gray-400 mb-2 uppercase tracking-widest px-1">Notes / Description</label>
-                <textarea 
-                  value={logFormNotes}
-                  onChange={(e) => setLogFormNotes(e.target.value)}
-                  placeholder="e.g. Swept the floor, clean kitchen, checked backups..."
-                  className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3.5 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all min-h-[90px] text-sm resize-none"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsLogModalOpen(false)}
-                  className="flex-1 py-3.5 bg-white/5 border border-white/10 hover:bg-white/10 text-white font-bold rounded-2xl transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={addLogMutation.isPending || !logFormUserId}
-                  className="flex-1 py-3.5 bg-primary hover:bg-blue-600 disabled:opacity-50 text-white font-bold rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
-                >
-                  {addLogMutation.isPending ? <RotateCw className="animate-spin w-4 h-4" /> : null}
-                  Log Turn
-                </button>
-              </div>
+              <button 
+                type="submit" 
+                disabled={addMockMemberMutation.isPending}
+                className="w-full py-3.5 bg-primary hover:bg-blue-600 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-primary/20"
+              >
+                Add Mock Member
+              </button>
             </form>
           </div>
         </div>
       )}
-
-      {/* 5. Calendar Day Detail Modal */}
-      {isDayDetailsOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-md glass rounded-[32px] p-6 border border-white/10 shadow-2xl relative animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
-            <div className="mb-4">
-              <span className="text-xs font-black text-primary uppercase tracking-widest">Rotation logs for</span>
-              <h3 className="text-2xl font-black text-white mt-1">
-                {format(selectedDate, 'MMMM d, yyyy')}
-              </h3>
-            </div>
-
-            <div className="space-y-4 overflow-y-auto flex-1 hide-scrollbar pr-1 py-2 max-h-[350px]">
-              {getLogsForDate(selectedDate).map(log => {
-                const profile = getProfileForLog(log);
-                const isOwnLog = log.user_id === user?.id;
-
-                return (
-                  <div key={log.id} className="bg-black/30 border border-white/5 p-4 rounded-2xl relative group/dayitem">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-9 h-9 rounded-full bg-neutral-700 flex items-center justify-center text-xs font-bold text-white uppercase overflow-hidden border border-white/10">
-                        {profile.avatar_url ? (
-                          <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          profile.full_name?.charAt(0) || '?'
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="font-extrabold text-sm text-gray-200 leading-tight">{profile.full_name || 'Member'}</h4>
-                        <p className="text-[10px] text-gray-500 mt-0.5">Logged {format(new Date(log.tracked_at), 'MMM d, h:mm a')}</p>
-                      </div>
-                    </div>
-                    {log.notes && (
-                      <p className="text-xs text-gray-400 bg-neutral-900/30 p-2.5 rounded-xl border border-white/5 italic">
-                        {log.notes}
-                      </p>
-                    )}
-
-                    {isOwnLog && (
-                      <button
-                        onClick={() => {
-                          if (confirm('Are you sure you want to delete this log entry?')) {
-                            deleteLogMutation.mutate(log.id);
-                            if (getLogsForDate(selectedDate).length <= 1) {
-                              setIsDayDetailsOpen(false);
-                            }
-                          }
-                        }}
-                        className="absolute top-4 right-4 text-gray-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-white/5 opacity-0 group-hover/dayitem:opacity-100 transition-all"
-                        title="Delete log"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="flex gap-3 pt-4 border-t border-white/5">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsDayDetailsOpen(false);
-                  handleOpenLogModal(selectedDate);
-                }}
-                className="flex-1 py-3.5 bg-primary hover:bg-blue-600 text-white font-bold rounded-2xl transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-primary/20"
-              >
-                <Plus size={16} /> Log Another Turn
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsDayDetailsOpen(false)}
-                className="flex-1 py-3.5 bg-white/5 border border-white/10 hover:bg-white/10 text-white font-bold rounded-2xl transition-all"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }

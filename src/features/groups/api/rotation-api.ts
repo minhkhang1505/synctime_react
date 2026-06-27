@@ -17,18 +17,29 @@ export interface RotationGroupMember {
   group_id: string;
   user_id: string;
   joined_at: string;
+  role: 'owner' | 'admin' | 'member';
   profiles: RotationProfile;
 }
 
-export interface RotationLog {
+export interface Expense {
   id: string;
   group_id: string;
+  title: string;
+  amount: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  profiles?: RotationProfile | null; // Creator profile
+}
+
+export interface PaymentLog {
+  id: string;
+  expense_id: string;
   user_id: string;
-  tracked_date: string; // YYYY-MM-DD
-  notes: string | null;
-  tracked_at: string; // ISO timestamp
-  created_at: string; // ISO timestamp
-  profiles?: RotationProfile | null;
+  paid_at: string;
+  note: string | null;
+  created_at: string;
+  profiles?: RotationProfile | null; // Payer profile
 }
 
 // Track whether we should use localStorage fallback due to tables not existing
@@ -49,7 +60,7 @@ export function isRotationLocalOnly(): boolean {
 }
 
 // ----------------------------------------------------
-// GROUPS API
+// UNIFIED GROUPS AND MEMBERS API (Using main tables)
 // ----------------------------------------------------
 
 export async function fetchUserRotationGroups(): Promise<RotationGroup[]> {
@@ -61,15 +72,15 @@ export async function fetchUserRotationGroups(): Promise<RotationGroup[]> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    // Two-step query to avoid PostgREST relationship cache issues
+    // Query unified groups using group_members
     const { data: memberships, error: memberError } = await supabase
-      .from('rotation_members')
+      .from('group_members')
       .select('group_id')
       .eq('user_id', user.id);
 
     if (memberError) {
       if (isTableMissingError(memberError)) {
-        console.warn('rotation_members table not found. Falling back to local storage.');
+        console.warn('group_members table not found. Falling back to local storage.');
         useLocalFallback = true;
         return getLocalGroups();
       }
@@ -83,7 +94,7 @@ export async function fetchUserRotationGroups(): Promise<RotationGroup[]> {
     const groupIds = memberships.map(m => m.group_id);
 
     const { data, error } = await supabase
-      .from('rotation_groups')
+      .from('groups')
       .select('*')
       .in('id', groupIds);
 
@@ -116,8 +127,8 @@ export async function createRotationGroup(name: string): Promise<RotationGroup> 
 
   try {
     const { data: group, error: groupErr } = await supabase
-      .from('rotation_groups')
-      .insert([{ name }])
+      .from('groups')
+      .insert([{ name, created_by: user.id }])
       .select()
       .single();
 
@@ -130,8 +141,8 @@ export async function createRotationGroup(name: string): Promise<RotationGroup> 
     }
 
     const { error: memberErr } = await supabase
-      .from('rotation_members')
-      .insert([{ group_id: group.id, user_id: user.id }]);
+      .from('group_members')
+      .insert([{ group_id: group.id, user_id: user.id, role: 'owner' }]);
 
     if (memberErr) throw memberErr;
 
@@ -158,7 +169,7 @@ export async function joinRotationGroup(inviteCode: string): Promise<RotationGro
 
   try {
     const { data: group, error: findError } = await supabase
-      .from('rotation_groups')
+      .from('groups')
       .select('*')
       .eq('invite_code', cleanCode)
       .single();
@@ -168,14 +179,14 @@ export async function joinRotationGroup(inviteCode: string): Promise<RotationGro
         useLocalFallback = true;
         return joinLocalGroup(cleanCode, user.id);
       }
-      throw new Error('Rotation group not found or invalid invite code');
+      throw new Error('Group not found or invalid invite code');
     }
 
     const { error: joinError } = await supabase
-      .from('rotation_members')
-      .insert([{ group_id: group.id, user_id: user.id }]);
+      .from('group_members')
+      .insert([{ group_id: group.id, user_id: user.id, role: 'member' }]);
 
-    if (joinError && joinError.code !== '23505') { // 23505: unique constraint violation
+    if (joinError && joinError.code !== '23505') {
       throw joinError;
     }
 
@@ -190,10 +201,6 @@ export async function joinRotationGroup(inviteCode: string): Promise<RotationGro
   }
 }
 
-// ----------------------------------------------------
-// MEMBERS API
-// ----------------------------------------------------
-
 export async function fetchRotationGroupMembers(groupId: string): Promise<RotationGroupMember[]> {
   if (useLocalFallback) {
     return getLocalGroupMembers(groupId);
@@ -201,11 +208,12 @@ export async function fetchRotationGroupMembers(groupId: string): Promise<Rotati
 
   try {
     const { data, error } = await supabase
-      .from('rotation_members')
+      .from('group_members')
       .select(`
         group_id,
         user_id,
         joined_at,
+        role,
         profiles (
           id,
           full_name,
@@ -234,7 +242,6 @@ export async function fetchRotationGroupMembers(groupId: string): Promise<Rotati
 }
 
 export async function addRotationMockMember(groupId: string, fullName: string): Promise<void> {
-  // Mock members are only available in LocalStorage mode
   if (!useLocalFallback) {
     throw new Error('Adding custom mock members is only supported in offline (local) mode.');
   }
@@ -244,6 +251,7 @@ export async function addRotationMockMember(groupId: string, fullName: string): 
     group_id: groupId,
     user_id: mockId,
     joined_at: new Date().toISOString(),
+    role: 'member',
     profiles: {
       id: mockId,
       full_name: fullName,
@@ -251,21 +259,21 @@ export async function addRotationMockMember(groupId: string, fullName: string): 
     }
   };
   members.push(newMember);
-  localStorage.setItem('rotation_members_local', JSON.stringify(members));
+  localStorage.setItem('group_members_local', JSON.stringify(members));
 }
 
 // ----------------------------------------------------
-// LOGS API
+// EXPENSES AND PAYMENTS API
 // ----------------------------------------------------
 
-export async function fetchRotationLogs(groupId: string): Promise<RotationLog[]> {
+export async function fetchExpenses(groupId: string): Promise<Expense[]> {
   if (useLocalFallback) {
-    return getLocalLogs(groupId);
+    return getLocalExpenses(groupId);
   }
 
   try {
     const { data, error } = await supabase
-      .from('rotation_logs')
+      .from('expenses')
       .select(`
         *,
         profiles (
@@ -275,57 +283,179 @@ export async function fetchRotationLogs(groupId: string): Promise<RotationLog[]>
         )
       `)
       .eq('group_id', groupId)
-      .order('tracked_at', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error) {
       if (isTableMissingError(error)) {
         useLocalFallback = true;
-        return getLocalLogs(groupId);
+        return getLocalExpenses(groupId);
       }
       throw error;
     }
 
-    return data as RotationLog[];
+    return data as Expense[];
   } catch (err: any) {
     if (isTableMissingError(err)) {
       useLocalFallback = true;
-      return getLocalLogs(groupId);
+      return getLocalExpenses(groupId);
     }
-    console.error('Supabase logs fetch failed:', err);
+    console.error('Supabase expenses fetch failed:', err);
     throw err;
   }
 }
 
-export async function saveRotationLog(
-  groupId: string,
-  dateStr: string,
-  notes: string,
-  targetUserId?: string
-): Promise<void> {
+export async function createExpense(groupId: string, title: string, amount: number): Promise<Expense> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
-  const userIdToSave = targetUserId || user.id;
-
   if (useLocalFallback) {
-    saveLocalLog(groupId, userIdToSave, dateStr, notes);
+    return saveLocalExpense(groupId, title, amount, user.id);
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('expenses')
+      .insert([{
+        group_id: groupId,
+        title,
+        amount,
+        created_by: user.id
+      }])
+      .select(`
+        *,
+        profiles (
+          id,
+          full_name,
+          avatar_url
+        )
+      `)
+      .single();
+
+    if (error) {
+      if (isTableMissingError(error)) {
+        useLocalFallback = true;
+        return saveLocalExpense(groupId, title, amount, user.id);
+      }
+      throw error;
+    }
+
+    return data as Expense;
+  } catch (err: any) {
+    if (isTableMissingError(err)) {
+      useLocalFallback = true;
+      return saveLocalExpense(groupId, title, amount, user.id);
+    }
+    console.error('Supabase create expense failed:', err);
+    throw err;
+  }
+}
+
+export async function deleteExpense(expenseId: string, groupId: string): Promise<void> {
+  if (useLocalFallback) {
+    deleteLocalExpense(expenseId, groupId);
     return;
   }
 
   try {
     const { error } = await supabase
-      .from('rotation_logs')
+      .from('expenses')
+      .delete()
+      .eq('id', expenseId);
+
+    if (error) {
+      if (isTableMissingError(error)) {
+        useLocalFallback = true;
+        deleteLocalExpense(expenseId, groupId);
+        return;
+      }
+      throw error;
+    }
+  } catch (err: any) {
+    if (isTableMissingError(err)) {
+      useLocalFallback = true;
+      deleteLocalExpense(expenseId, groupId);
+      return;
+    }
+    console.error('Supabase delete expense failed:', err);
+    throw err;
+  }
+}
+
+export async function fetchPaymentLogs(groupId: string): Promise<PaymentLog[]> {
+  if (useLocalFallback) {
+    return getLocalPaymentLogs(groupId);
+  }
+
+  try {
+    // 1. Get expenses IDs for this group
+    const { data: expenses, error: expError } = await supabase
+      .from('expenses')
+      .select('id')
+      .eq('group_id', groupId);
+
+    if (expError) {
+      if (isTableMissingError(expError)) {
+        useLocalFallback = true;
+        return getLocalPaymentLogs(groupId);
+      }
+      throw expError;
+    }
+
+    if (!expenses || expenses.length === 0) return [];
+
+    const expenseIds = expenses.map(e => e.id);
+
+    // 2. Get payment logs for those expenses
+    const { data, error } = await supabase
+      .from('payment_logs')
+      .select(`
+        *,
+        profiles (
+          id,
+          full_name,
+          avatar_url
+        )
+      `)
+      .in('expense_id', expenseIds)
+      .order('paid_at', { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    return data as PaymentLog[];
+  } catch (err: any) {
+    if (isTableMissingError(err)) {
+      useLocalFallback = true;
+      return getLocalPaymentLogs(groupId);
+    }
+    console.error('Supabase payment logs fetch failed:', err);
+    throw err;
+  }
+}
+
+export async function markAsPaid(expenseId: string, note?: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  if (useLocalFallback) {
+    saveLocalPayment(expenseId, user.id, note);
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('payment_logs')
       .insert([{
-        group_id: groupId,
-        user_id: userIdToSave,
-        tracked_date: dateStr,
-        notes: notes || null
+        expense_id: expenseId,
+        user_id: user.id,
+        note: note || null
       }]);
 
     if (error) {
       if (isTableMissingError(error)) {
         useLocalFallback = true;
-        saveLocalLog(groupId, userIdToSave, dateStr, notes);
+        saveLocalPayment(expenseId, user.id, note);
         return;
       }
       throw error;
@@ -333,30 +463,34 @@ export async function saveRotationLog(
   } catch (err: any) {
     if (isTableMissingError(err)) {
       useLocalFallback = true;
-      saveLocalLog(groupId, userIdToSave, dateStr, notes);
+      saveLocalPayment(expenseId, user.id, note);
       return;
     }
-    console.error('Supabase save log failed:', err);
+    console.error('Supabase mark as paid failed:', err);
     throw err;
   }
 }
 
-export async function deleteRotationLog(logId: string, groupId: string): Promise<void> {
+export async function unmarkAsPaid(expenseId: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
   if (useLocalFallback) {
-    deleteLocalLog(logId, groupId);
+    deleteLocalPayment(expenseId, user.id);
     return;
   }
 
   try {
     const { error } = await supabase
-      .from('rotation_logs')
+      .from('payment_logs')
       .delete()
-      .eq('id', logId);
+      .eq('expense_id', expenseId)
+      .eq('user_id', user.id);
 
     if (error) {
       if (isTableMissingError(error)) {
         useLocalFallback = true;
-        deleteLocalLog(logId, groupId);
+        deleteLocalPayment(expenseId, user.id);
         return;
       }
       throw error;
@@ -364,25 +498,32 @@ export async function deleteRotationLog(logId: string, groupId: string): Promise
   } catch (err: any) {
     if (isTableMissingError(err)) {
       useLocalFallback = true;
-      deleteLocalLog(logId, groupId);
+      deleteLocalPayment(expenseId, user.id);
       return;
     }
-    console.error('Supabase delete log failed:', err);
+    console.error('Supabase unmark as paid failed:', err);
     throw err;
   }
 }
 
-export function subscribeToRotationLogs(groupId: string, callback: () => void) {
+export function subscribeToPayments(groupId: string, callback: () => void) {
   if (useLocalFallback) {
     return { unsubscribe: () => {} };
   }
   return supabase
-    .channel(`public:rotation_logs:group_id=eq.${groupId}`)
+    .channel(`public:payment_logs:group_id=${groupId}`)
     .on('postgres_changes', { 
       event: '*', 
       schema: 'public', 
-      table: 'rotation_logs',
-      filter: `group_id=eq.${groupId}` 
+      table: 'payment_logs'
+    }, () => {
+      callback();
+    })
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'expenses',
+      filter: `group_id=eq.${groupId}`
     }, () => {
       callback();
     })
@@ -394,7 +535,7 @@ export function subscribeToRotationLogs(groupId: string, callback: () => void) {
 // ----------------------------------------------------
 
 function getLocalGroups(): RotationGroup[] {
-  const stored = localStorage.getItem('rotation_groups_local');
+  const stored = localStorage.getItem('groups_local');
   if (!stored) return [];
   try {
     return JSON.parse(stored);
@@ -408,25 +549,25 @@ function createLocalGroup(name: string, creatorId: string): RotationGroup {
   const newGroup: RotationGroup = {
     id: 'group-' + Math.random().toString(36).substring(2, 9),
     name: name,
-    invite_code: 'rot-' + Math.random().toString(36).substring(2, 8),
+    invite_code: 'grp-' + Math.random().toString(36).substring(2, 8),
     created_at: new Date().toISOString()
   };
   groups.push(newGroup);
-  localStorage.setItem('rotation_groups_local', JSON.stringify(groups));
+  localStorage.setItem('groups_local', JSON.stringify(groups));
 
-  // Auto join as creator
   const members = getRawLocalMembers();
   members.push({
     group_id: newGroup.id,
     user_id: creatorId,
     joined_at: new Date().toISOString(),
+    role: 'owner',
     profiles: {
       id: creatorId,
-      full_name: 'You (Creator)',
+      full_name: 'You (Owner)',
       avatar_url: null
     }
   });
-  localStorage.setItem('rotation_members_local', JSON.stringify(members));
+  localStorage.setItem('group_members_local', JSON.stringify(members));
 
   return newGroup;
 }
@@ -434,7 +575,7 @@ function createLocalGroup(name: string, creatorId: string): RotationGroup {
 function joinLocalGroup(inviteCode: string, userId: string): RotationGroup {
   const groups = getLocalGroups();
   const group = groups.find(g => g.invite_code === inviteCode);
-  if (!group) throw new Error('Rotation group not found locally');
+  if (!group) throw new Error('Group not found locally');
 
   const members = getRawLocalMembers();
   const alreadyJoined = members.some(m => m.group_id === group.id && m.user_id === userId);
@@ -444,20 +585,21 @@ function joinLocalGroup(inviteCode: string, userId: string): RotationGroup {
       group_id: group.id,
       user_id: userId,
       joined_at: new Date().toISOString(),
+      role: 'member',
       profiles: {
         id: userId,
         full_name: 'You',
         avatar_url: null
       }
     });
-    localStorage.setItem('rotation_members_local', JSON.stringify(members));
+    localStorage.setItem('group_members_local', JSON.stringify(members));
   }
 
   return group;
 }
 
 function getRawLocalMembers(): RotationGroupMember[] {
-  const stored = localStorage.getItem('rotation_members_local');
+  const stored = localStorage.getItem('group_members_local');
   if (!stored) return [];
   try {
     return JSON.parse(stored);
@@ -471,8 +613,8 @@ function getLocalGroupMembers(groupId: string): RotationGroupMember[] {
   return members.filter(m => m.group_id === groupId);
 }
 
-function getLocalLogs(groupId: string): RotationLog[] {
-  const stored = localStorage.getItem(`rotation_logs_v2_${groupId}`);
+function getLocalExpenses(groupId: string): Expense[] {
+  const stored = localStorage.getItem(`expenses_local_${groupId}`);
   if (!stored) return [];
   try {
     return JSON.parse(stored);
@@ -481,24 +623,104 @@ function getLocalLogs(groupId: string): RotationLog[] {
   }
 }
 
-function saveLocalLog(groupId: string, userId: string, dateStr: string, notes: string) {
-  const logs = getLocalLogs(groupId);
-  const newLog: RotationLog = {
-    id: 'log-' + Math.random().toString(36).substring(2, 9),
+function saveLocalExpense(groupId: string, title: string, amount: number, creatorId: string): Expense {
+  const expenses = getLocalExpenses(groupId);
+  const newExpense: Expense = {
+    id: 'expense-' + Math.random().toString(36).substring(2, 9),
     group_id: groupId,
-    user_id: userId,
-    tracked_date: dateStr,
-    notes: notes || null,
-    tracked_at: new Date().toISOString(),
+    title,
+    amount,
+    created_by: creatorId,
     created_at: new Date().toISOString(),
-    profiles: null
+    updated_at: new Date().toISOString(),
+    profiles: {
+      id: creatorId,
+      full_name: 'You',
+      avatar_url: null
+    }
   };
-  logs.unshift(newLog);
-  localStorage.setItem(`rotation_logs_v2_${groupId}`, JSON.stringify(logs));
+  expenses.unshift(newExpense);
+  localStorage.setItem(`expenses_local_${groupId}`, JSON.stringify(expenses));
+  return newExpense;
 }
 
-function deleteLocalLog(logId: string, groupId: string) {
-  const logs = getLocalLogs(groupId);
-  const filtered = logs.filter(l => l.id !== logId);
-  localStorage.setItem(`rotation_logs_v2_${groupId}`, JSON.stringify(filtered));
+function deleteLocalExpense(expenseId: string, groupId: string) {
+  const expenses = getLocalExpenses(groupId);
+  const filtered = expenses.filter(e => e.id !== expenseId);
+  localStorage.setItem(`expenses_local_${groupId}`, JSON.stringify(filtered));
+
+  // Also clean up payment logs
+  const payments = getLocalPaymentLogs(groupId);
+  const filteredPayments = payments.filter(p => p.expense_id !== expenseId);
+  localStorage.setItem(`payment_logs_local_${groupId}`, JSON.stringify(filteredPayments));
+}
+
+function getLocalPaymentLogs(groupId: string): PaymentLog[] {
+  const stored = localStorage.getItem(`payment_logs_local_${groupId}`);
+  if (!stored) return [];
+  try {
+    return JSON.parse(stored);
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveLocalPayment(expenseId: string, userId: string, note?: string): PaymentLog {
+  // Find group ID from expenseId locally
+  // We can look at localStorage keys to find which group has this expense
+  let groupId = '';
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('expenses_local_')) {
+      const expenses: Expense[] = JSON.parse(localStorage.getItem(key) || '[]');
+      if (expenses.some(e => e.id === expenseId)) {
+        groupId = key.replace('expenses_local_', '');
+        break;
+      }
+    }
+  }
+
+  if (!groupId) throw new Error('Expense not found locally');
+
+  const payments = getLocalPaymentLogs(groupId);
+  // Ensure no duplicate payment log
+  const exists = payments.some(p => p.expense_id === expenseId && p.user_id === userId);
+  if (exists) return payments.find(p => p.expense_id === expenseId && p.user_id === userId)!;
+
+  const newPayment: PaymentLog = {
+    id: 'pay-' + Math.random().toString(36).substring(2, 9),
+    expense_id: expenseId,
+    user_id: userId,
+    paid_at: new Date().toISOString(),
+    note: note || null,
+    created_at: new Date().toISOString(),
+    profiles: {
+      id: userId,
+      full_name: 'You',
+      avatar_url: null
+    }
+  };
+  payments.unshift(newPayment);
+  localStorage.setItem(`payment_logs_local_${groupId}`, JSON.stringify(payments));
+  return newPayment;
+}
+
+function deleteLocalPayment(expenseId: string, userId: string) {
+  let groupId = '';
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('expenses_local_')) {
+      const expenses: Expense[] = JSON.parse(localStorage.getItem(key) || '[]');
+      if (expenses.some(e => e.id === expenseId)) {
+        groupId = key.replace('expenses_local_', '');
+        break;
+      }
+    }
+  }
+
+  if (!groupId) return;
+
+  const payments = getLocalPaymentLogs(groupId);
+  const filtered = payments.filter(p => !(p.expense_id === expenseId && p.user_id === userId));
+  localStorage.setItem(`payment_logs_local_${groupId}`, JSON.stringify(filtered));
 }
