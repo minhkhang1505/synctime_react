@@ -122,9 +122,9 @@ END $$;
 
 -- 6. DROP OLD ROTATION TABLES (AFTER MIGRATION IN PRODUCTION IS COMPLETE)
 -- Note: Comment out if you want to verify migration before dropping
-DROP TABLE IF EXISTS public.rotation_logs;
-DROP TABLE IF EXISTS public.rotation_members;
-DROP TABLE IF EXISTS public.rotation_groups;
+DROP TABLE IF EXISTS public.rotation_logs CASCADE;
+DROP TABLE IF EXISTS public.rotation_members CASCADE;
+DROP TABLE IF EXISTS public.rotation_groups CASCADE;
 
 -- 7. CLEAN UP AND CONSTRAINT INTEGRITY FOR AVAILABILITY SLOTS
 -- Remove orphan availability slots (slots belonging to users not in the group)
@@ -145,7 +145,7 @@ ON DELETE CASCADE;
 -- Deduplicate identical availability slots
 DELETE FROM public.availability_slots a
 WHERE a.id NOT IN (
-    SELECT MIN(b.id)
+    SELECT MIN(b.id::text)::uuid
     FROM public.availability_slots b
     GROUP BY b.group_id, b.user_id, b.available_date, b.start_time, b.end_time
 );
