@@ -97,3 +97,12 @@ export async function fetchGroupMembers(groupId: string): Promise<GroupMember[]>
   if (error) throw error;
   return data as any;
 }
+
+export async function deleteGroup(groupId: string): Promise<void> {
+  const { error } = await supabase
+    .from('groups')
+    .delete()
+    .eq('id', groupId);
+
+  if (error) throw error;
+}

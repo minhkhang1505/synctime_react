@@ -8,7 +8,15 @@ ALTER TABLE public.groups ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES pu
 ALTER TABLE public.groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL;
 
 -- Make invite_code UNIQUE if not already
-ALTER TABLE public.groups ADD CONSTRAINT groups_invite_code_unique UNIQUE (invite_code);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'groups_invite_code_unique' AND table_name = 'groups'
+    ) THEN
+        ALTER TABLE public.groups ADD CONSTRAINT groups_invite_code_unique UNIQUE (invite_code);
+    END IF;
+END $$;
 
 -- Extend group_members with a role column
 ALTER TABLE public.group_members ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'admin', 'member'));
@@ -200,12 +208,36 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON public.notifications(u
 CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON public.notifications(user_id, created_at DESC);
 
 -- 10. ENABLE ROW LEVEL SECURITY (RLS)
+ALTER TABLE public.groups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payment_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
 
 -- 11. DEFINE RLS POLICIES
+
+-- Groups policies
+DROP POLICY IF EXISTS select_groups ON public.groups;
+CREATE POLICY select_groups ON public.groups
+    FOR SELECT TO authenticated
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.group_members gm
+            WHERE gm.group_id = groups.id AND gm.user_id = auth.uid()
+        )
+    );
+
+DROP POLICY IF EXISTS insert_groups ON public.groups;
+CREATE POLICY insert_groups ON public.groups
+    FOR INSERT TO authenticated
+    WITH CHECK (true);
+
+DROP POLICY IF EXISTS delete_groups ON public.groups;
+CREATE POLICY delete_groups ON public.groups
+    FOR DELETE TO authenticated
+    USING (
+        created_by = auth.uid()
+    );
 
 -- Expenses policies
 DROP POLICY IF EXISTS select_expenses ON public.expenses;

@@ -724,3 +724,47 @@ function deleteLocalPayment(expenseId: string, userId: string) {
   const filtered = payments.filter(p => !(p.expense_id === expenseId && p.user_id === userId));
   localStorage.setItem(`payment_logs_local_${groupId}`, JSON.stringify(filtered));
 }
+
+export async function deleteRotationGroup(groupId: string): Promise<void> {
+  if (useLocalFallback) {
+    deleteLocalGroup(groupId);
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('groups')
+      .delete()
+      .eq('id', groupId);
+
+    if (error) {
+      if (isTableMissingError(error)) {
+        useLocalFallback = true;
+        deleteLocalGroup(groupId);
+        return;
+      }
+      throw error;
+    }
+  } catch (err: any) {
+    if (isTableMissingError(err)) {
+      useLocalFallback = true;
+      deleteLocalGroup(groupId);
+      return;
+    }
+    console.error('Supabase delete group failed:', err);
+    throw err;
+  }
+}
+
+function deleteLocalGroup(groupId: string) {
+  const groups = getLocalGroups();
+  const filtered = groups.filter(g => g.id !== groupId);
+  localStorage.setItem('groups_local', JSON.stringify(filtered));
+
+  const members = getRawLocalMembers();
+  const filteredMembers = members.filter(m => m.group_id !== groupId);
+  localStorage.setItem('group_members_local', JSON.stringify(filteredMembers));
+
+  localStorage.removeItem(`expenses_local_${groupId}`);
+  localStorage.removeItem(`payment_logs_local_${groupId}`);
+}

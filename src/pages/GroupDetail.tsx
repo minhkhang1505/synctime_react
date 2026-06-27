@@ -1,9 +1,10 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { fetchGroupMembers, fetchUserGroups } from '../features/groups/api/groups-api';
-import { ArrowLeft, Copy, Calendar as CalendarIcon, Users } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { fetchGroupMembers, fetchUserGroups, deleteGroup } from '../features/groups/api/groups-api';
+import { ArrowLeft, Copy, Calendar as CalendarIcon, Users, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '../store/useAuthStore';
 
 export function GroupDetail() {
   const { id } = useParams<{ id: string }>();
@@ -21,6 +22,23 @@ export function GroupDetail() {
     queryFn: () => fetchGroupMembers(id!),
     enabled: !!id
   });
+
+  const { user } = useAuthStore();
+  const queryClient = useQueryClient();
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteGroup,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      toast.success('Group deleted successfully!');
+      navigate('/groups');
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to delete group');
+    }
+  });
+
+  const isOwner = group?.created_by === user?.id;
 
   if (!group) return null;
 
@@ -64,6 +82,21 @@ export function GroupDetail() {
               <span className="text-[13px] md:text-xl font-bold text-white leading-tight">View Matches</span>
             </Link>
           </div>
+
+          {isOwner && (
+            <button
+              onClick={() => {
+                if (confirm('Are you sure you want to permanently delete this group? This cannot be undone.')) {
+                  deleteMutation.mutate(group.id);
+                }
+              }}
+              disabled={deleteMutation.isPending}
+              className="w-full py-4 md:py-5 rounded-[20px] md:rounded-[40px] bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 text-red-400 font-bold text-sm md:text-lg flex items-center justify-center gap-2.5 transition-all shadow-xl active:scale-[0.98]"
+            >
+              <Trash2 size={20} className="md:w-6 md:h-6" />
+              {deleteMutation.isPending ? 'Deleting Group...' : 'Delete Group'}
+            </button>
+          )}
         </div>
 
         {/* Right Column: Members */}
