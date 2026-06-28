@@ -239,6 +239,13 @@ export function Rotation() {
     });
   };
 
+  const formatInputAmount = (val: string) => {
+    if (!val) return '';
+    const num = parseFloat(val);
+    if (isNaN(num)) return '';
+    return new Intl.NumberFormat('vi-VN').format(num);
+  };
+
   const formatVND = (amount: number) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
   };
@@ -630,21 +637,61 @@ export function Rotation() {
                   </div>
                 </div>
 
-                {/* Amount input */}
+                {/* Amount input with +/- 5000 steppers */}
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Số tiền (đ)</label>
-                  <div className="relative">
+                  <div className="flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const current = parseFloat(trackingAmount) || 0;
+                        const next = Math.max(0, current - 5000);
+                        setTrackingAmount(next.toString());
+                      }}
+                      className="p-3 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white rounded-l-xl text-gray-400 font-black active:scale-95 transition-all text-base px-4 shrink-0"
+                    >
+                      -
+                    </button>
                     <input 
-                      type="number"
-                      pattern="[0-9]*"
+                      type="text"
                       inputMode="numeric"
-                      value={trackingAmount}
-                      onChange={(e) => setTrackingAmount(e.target.value)}
-                      placeholder="Ví dụ: 50000" 
-                      className="w-full bg-white/5 border border-white/10 rounded-xl pl-4 pr-12 py-3 text-white text-sm focus:outline-none focus:border-primary transition-colors font-bold"
+                      value={formatInputAmount(trackingAmount)}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/\D/g, '');
+                        setTrackingAmount(raw);
+                      }}
+                      placeholder="Ví dụ: 50.000" 
+                      className="w-full bg-white/5 border-y border-white/10 py-3 text-white text-sm focus:outline-none text-center font-bold"
                       required
                     />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs">VND</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const current = parseFloat(trackingAmount) || 0;
+                        const next = current + 5000;
+                        setTrackingAmount(next.toString());
+                      }}
+                      className="p-3 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white rounded-r-xl text-gray-400 font-black active:scale-95 transition-all text-base px-4 shrink-0"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  {/* Quick select increments */}
+                  <div className="flex gap-2 justify-center mt-2 flex-wrap">
+                    {[10000, 20000, 50000, 100000].map(val => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => {
+                          const current = parseFloat(trackingAmount) || 0;
+                          setTrackingAmount((current + val).toString());
+                        }}
+                        className="px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 text-[11px] font-semibold text-gray-300 border border-white/5 transition-all active:scale-95"
+                      >
+                        +{formatInputAmount(val.toString())}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
