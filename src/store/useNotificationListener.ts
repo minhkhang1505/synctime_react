@@ -38,23 +38,27 @@ export function useNotificationListener() {
             // Extract display values from pre-resolved payload
             const notifyType = newRow.type;
             const meta = newRow.payload || {};
-            const userName = meta.userName || 'A member';
-            const groupName = meta.groupName || 'a group';
-            const expenseTitle = meta.expenseTitle || 'an expense';
+            const userName = meta.userName || 'Một thành viên';
+            const groupName = meta.groupName || 'nhóm';
+            const expenseTitle = meta.expenseTitle || 'chi phí';
 
             // Show real-time desktop toast alerts
             if (notifyType === 'USER_JOINED') {
-              toast.success(`${userName} joined ${groupName}!`);
+              toast.success(`${userName} đã tham gia ${groupName}!`);
             } else if (notifyType === 'USER_LEFT') {
-              toast(`${userName} left ${groupName}`, {
+              toast(`${userName} đã rời khỏi ${groupName}`, {
                 icon: '👋',
               });
             } else if (notifyType === 'AVAILABLE_UPDATED') {
-              toast(`${userName} updated their availability in ${groupName}`, {
+              toast(`${userName} đã cập nhật lịch rảnh trong ${groupName}`, {
                 icon: '🗓️',
               });
             } else if (notifyType === 'PAYMENT_MARKED') {
-              toast.success(`${userName} completed payment for "${expenseTitle}"!`);
+              toast.success(`${userName} đã hoàn tất thanh toán cho "${expenseTitle}"!`);
+            } else if (notifyType === 'EXPENSE_TRACKED') {
+              toast.success(`${userName} đã ghi nhận chi tiêu "${expenseTitle}"!`, {
+                icon: '💵',
+              });
             }
           }
         )

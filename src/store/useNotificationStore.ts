@@ -91,16 +91,18 @@ export const useNotificationStore = create<NotificationState>()(
 
           const mapped: AppNotification[] = (data || []).map(n => ({
             id: n.id,
-            title: n.type === 'USER_JOINED' ? 'New Member Joined' :
-                   n.type === 'USER_LEFT' ? 'Member Left' :
-                   n.type === 'AVAILABLE_UPDATED' ? 'Schedule Updated' : 'Payment Completed',
-            message: n.type === 'USER_JOINED' ? `${n.payload.userName || 'A member'} has just joined the group "${n.payload.groupName || 'a group'}". Say hi!` :
-                     n.type === 'USER_LEFT' ? `${n.payload.userName || 'A member'} left the group "${n.payload.groupName || 'a group'}".` :
-                     n.type === 'AVAILABLE_UPDATED' ? `${n.payload.userName || 'A member'} recently updated their availability in "${n.payload.groupName || 'a group'}".` :
-                     `${n.payload.userName || 'A member'} marked payment for "${n.payload.expenseTitle || 'an expense'}".`,
+            title: n.type === 'USER_JOINED' ? 'Thành viên mới' :
+                   n.type === 'USER_LEFT' ? 'Thành viên rời nhóm' :
+                   n.type === 'AVAILABLE_UPDATED' ? 'Cập nhật lịch rảnh' :
+                   n.type === 'EXPENSE_TRACKED' ? 'Chi tiêu mới' : 'Thanh toán hoàn tất',
+            message: n.type === 'USER_JOINED' ? `${n.payload.userName || 'Một thành viên'} đã tham gia nhóm "${n.payload.groupName || 'nhóm'}".` :
+                     n.type === 'USER_LEFT' ? `${n.payload.userName || 'Một thành viên'} đã rời khỏi nhóm "${n.payload.groupName || 'nhóm'}".` :
+                     n.type === 'AVAILABLE_UPDATED' ? `${n.payload.userName || 'Một thành viên'} vừa cập nhật lịch rảnh trong nhóm "${n.payload.groupName || 'nhóm'}".` :
+                     n.type === 'EXPENSE_TRACKED' ? `${n.payload.userName || 'Một thành viên'} đã ghi nhận chi tiêu "${n.payload.expenseTitle || 'chi phí'}" trong nhóm "${n.payload.groupName || 'nhóm'}".` :
+                     `${n.payload.userName || 'Một thành viên'} đã xác nhận thanh toán cho "${n.payload.expenseTitle || 'chi phí'}".`,
             createdAt: n.created_at,
             read: n.is_read,
-            type: n.type === 'PAYMENT_MARKED' ? 'success' : 'info'
+            type: (n.type === 'PAYMENT_MARKED' || n.type === 'EXPENSE_TRACKED') ? 'success' : 'info'
           }));
 
           set({ notifications: mapped, isLoading: false });

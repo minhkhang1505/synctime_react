@@ -547,9 +547,40 @@ FOR EACH ROW EXECUTE FUNCTION public.log_availability_changes();
 -- Trigger 4: Expense Creation
 CREATE OR REPLACE FUNCTION public.log_expense_creation()
 RETURNS TRIGGER AS $$
+DECLARE
+    actor_name TEXT;
+    target_group_name TEXT;
+    member_record RECORD;
 BEGIN
+    -- Log in activity_logs
     INSERT INTO public.activity_logs (group_id, actor_id, action, entity, entity_id)
     VALUES (NEW.group_id, NEW.created_by, 'CREATE_EXPENSE', 'expenses', NEW.id);
+
+    -- Get actor name and group name
+    SELECT full_name INTO actor_name FROM public.profiles WHERE id = NEW.created_by;
+    SELECT name INTO target_group_name FROM public.groups WHERE id = NEW.group_id;
+
+    -- Create notification for other members
+    FOR member_record IN 
+        SELECT user_id FROM public.group_members 
+        WHERE group_id = NEW.group_id AND user_id != NEW.created_by
+    LOOP
+        INSERT INTO public.notifications (user_id, group_id, actor_id, type, payload)
+        VALUES (
+            member_record.user_id,
+            NEW.group_id,
+            NEW.created_by,
+            'EXPENSE_TRACKED',
+            jsonb_build_object(
+                'userId', NEW.created_by,
+                'userName', COALESCE(actor_name, 'Một thành viên'),
+                'groupName', COALESCE(target_group_name, 'nhóm'),
+                'expenseId', NEW.id,
+                'expenseTitle', NEW.title
+            )
+        );
+    END LOOP;
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
