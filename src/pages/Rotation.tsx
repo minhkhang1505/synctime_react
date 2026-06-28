@@ -512,7 +512,7 @@ export function Rotation() {
                               )}
                             </div>
                             <p className="text-[10px] text-gray-500 mt-0.5 truncate">
-                              Ghi bởi {profile.full_name || 'Thành viên'}
+                              Ghi bởi <span className="text-blue-400 font-semibold">{profile.full_name || 'Thành viên'}</span>
                             </p>
                           </div>
                         </div>
