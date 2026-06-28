@@ -5,6 +5,7 @@ import { saveAvailability } from '../features/scheduler/api/availability-api';
 import { supabase } from '../lib/supabase';
 import { ArrowLeft, Save, Loader2, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { format, addDays, startOfToday, isSameDay, startOfWeek } from 'date-fns';
+import { vi } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 
 export function Availability() {
@@ -43,9 +44,9 @@ export function Availability() {
   }, [existingSlots, hasInitialized]);
 
   const TIME_BLOCKS = [
-    { label: 'MOR', start: '08:00:00', end: '12:00:00' },
-    { label: 'AFT', start: '13:00:00', end: '17:00:00' },
-    { label: 'EVE', start: '18:00:00', end: '22:00:00' },
+    { label: 'Sáng', start: '08:00:00', end: '12:00:00' },
+    { label: 'Chiều', start: '13:00:00', end: '17:00:00' },
+    { label: 'Tối', start: '18:00:00', end: '22:00:00' },
   ];
 
   const currentWeekStart = startOfWeek(today, { weekStartsOn: 1 });
@@ -57,7 +58,7 @@ export function Availability() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['availability', id] });
       queryClient.invalidateQueries({ queryKey: ['my_availability', id] });
-      toast.success('Availability saved successfully!');
+      toast.success('Đã lưu lịch rảnh thành công!');
       navigate(`/match/${id}`);
     }
   });
@@ -96,7 +97,7 @@ export function Availability() {
           <button onClick={() => navigate(-1)} className="p-2 md:p-3 rounded-xl md:rounded-2xl glass text-gray-400 hover:text-white transition-colors">
             <ArrowLeft size={20} className="md:w-6 md:h-6" />
           </button>
-          <h2 className="text-2xl md:text-4xl font-bold tracking-tight">Set Free Time</h2>
+          <h2 className="text-2xl md:text-4xl font-bold tracking-tight">Cài đặt Lịch Rảnh</h2>
         </div>
         <button 
           onClick={handleSave}
@@ -104,7 +105,7 @@ export function Availability() {
           className="bg-primary text-white p-2.5 px-5 md:p-4 md:px-8 rounded-xl md:rounded-2xl hover:bg-blue-600 active:scale-95 transition-all flex items-center gap-2 md:gap-3 shadow-lg shadow-primary/20 font-bold text-sm md:text-lg"
         >
           {mutation.isPending ? <Loader2 className="animate-spin w-5 h-5 md:w-6 md:h-6" /> : <Save size={18} className="md:w-6 md:h-6" />}
-          Save
+          Lưu
         </button>
       </div>
 
@@ -116,7 +117,7 @@ export function Availability() {
           <ChevronLeft size={20} className="md:w-6 md:h-6" />
         </button>
         <span className="font-bold text-[14px] md:text-lg text-gray-200">
-          {format(dates[0], 'MMM d')} - {format(dates[6], 'MMM d, yyyy')}
+          {format(dates[0], 'd MMM', { locale: vi })} - {format(dates[6], 'd MMM, yyyy', { locale: vi })}
         </span>
         <button 
           onClick={() => setPageOffset(prev => prev + 1)}
@@ -148,7 +149,7 @@ export function Availability() {
                 {dates.map((date, i) => (
                   <div key={i} className="flex flex-col gap-1.5 md:gap-4">
                     <div className="h-10 md:h-16 flex flex-col items-center justify-center">
-                      <span className="text-[9px] md:text-sm uppercase font-bold text-gray-500 leading-tight md:mb-1">{format(date, 'EEE')}</span>
+                      <span className="text-[9px] md:text-sm uppercase font-bold text-gray-500 leading-tight md:mb-1">{format(date, 'EEEE', { locale: vi })}</span>
                       <span className={`text-[13px] md:text-xl font-bold mt-0.5 ${isSameDay(date, new Date()) ? 'text-primary' : 'text-gray-200'}`}>
                         {format(date, 'd')}
                       </span>
@@ -180,7 +181,7 @@ export function Availability() {
           </div>
           
           <div className="mt-6 md:mt-10 pt-4 md:pt-8 border-t border-white/5 flex items-center justify-center gap-4 text-[10px] md:text-sm font-bold text-gray-400 uppercase tracking-widest">
-            <p>Tap a square to toggle your availability</p>
+            <p>Nhấn vào ô vuông để chọn/hủy lịch rảnh của bạn</p>
           </div>
         </div>
       )}

@@ -21,7 +21,7 @@ export function CreateGroupModal() {
       navigate(`/groups/${data.id}`);
     },
     onError: (error: any) => {
-      toast.error(error.message || 'Failed to create group');
+      toast.error(error.message || 'Không thể tạo nhóm');
     }
   });
 
@@ -36,16 +36,16 @@ export function CreateGroupModal() {
         >
           <X size={20} className="text-gray-400" />
         </button>
-        <h2 className="text-2xl font-bold mb-6">New Group</h2>
+        <h2 className="text-2xl font-bold mb-6">Tạo Nhóm Mới</h2>
         <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(name); }}>
           <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2 px-1">Group Name</label>
+              <label className="block text-sm font-medium text-gray-400 mb-2 px-1">Tên Nhóm</label>
               <input 
                 type="text" 
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Weekend Trip" 
+                placeholder="Ví dụ: Bạn cùng phòng" 
                 className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-inner"
                 required
               />
@@ -56,7 +56,7 @@ export function CreateGroupModal() {
               className="w-full bg-primary text-white font-medium px-4 py-4 rounded-2xl hover:bg-blue-600 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-primary/20"
             >
               {mutation.isPending ? <Loader2 className="animate-spin w-5 h-5" /> : null}
-              Create Group
+              Tạo Nhóm
             </button>
           </div>
         </form>

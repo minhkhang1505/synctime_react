@@ -20,7 +20,7 @@ export function JoinGroupModal() {
       navigate(`/groups/${data.id}`);
     },
     onError: (error: any) => {
-      toast.error(error.message || 'Failed to join group. Check the code.');
+      toast.error(error.message || 'Không thể tham gia nhóm. Vui lòng kiểm tra lại mã.');
     }
   });
 
@@ -36,14 +36,14 @@ export function JoinGroupModal() {
           <X size={24} />
         </button>
         
-        <h2 className="text-2xl font-bold mb-2">Join a Group</h2>
-        <p className="text-gray-400 text-sm mb-6">Enter the 6-character invite code.</p>
+        <h2 className="text-2xl font-bold mb-2">Tham gia Nhóm</h2>
+        <p className="text-gray-400 text-sm mb-6">Nhập mã mời gồm 6 ký tự.</p>
 
         <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(code); }}>
           <div className="mb-6">
             <input
               type="text"
-              placeholder="e.g. A1B2C3"
+              placeholder="Ví dụ: A1B2C3"
               className="w-full bg-black/20 border border-white/10 rounded-xl md:rounded-2xl px-4 py-3 md:py-4 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all font-mono text-center text-xl tracking-widest uppercase"
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase().slice(0, 6))}
@@ -56,7 +56,7 @@ export function JoinGroupModal() {
             disabled={mutation.isPending || code.length < 6}
             className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-3 md:py-4 px-4 rounded-xl md:rounded-2xl transition-colors disabled:opacity-50"
           >
-            {mutation.isPending ? 'Joining...' : 'Join Group'}
+            {mutation.isPending ? 'Đang tham gia...' : 'Tham gia Nhóm'}
           </button>
         </form>
       </div>

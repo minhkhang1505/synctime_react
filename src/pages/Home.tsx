@@ -38,7 +38,7 @@ export function Home() {
             SyncTime
           </h2>
           <p className="text-gray-400 text-sm md:text-lg leading-relaxed px-4 md:px-0">
-            Coordinate schedules effortlessly with your friends and team. Realtime matching, zero hassle.
+            Lên lịch rảnh cùng bạn bè và đồng nghiệp dễ dàng. Khớp lịch thời gian thực, không còn phiền toái.
           </p>
         </div>
 
@@ -54,18 +54,18 @@ export function Home() {
       <div className="mt-8 md:mt-2 mb-10 md:mb-16 flex justify-between items-start">
         <div className="space-y-2">
           <h2 className="text-3xl md:text-5xl font-bold tracking-tight">
-            Hi, <span className="text-primary bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
-              {user.user_metadata?.full_name?.split(' ')[0] || 'Friend'}
+            Xin chào, <span className="text-primary bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
+              {user.user_metadata?.full_name?.split(' ')[0] || 'Bạn'}
             </span> 👋
           </h2>
           <p className="text-gray-400 text-sm md:text-xl leading-relaxed mt-2 font-medium">
-            Ready to find time together?
+            Sẵn sàng lên lịch rảnh cùng nhau?
           </p>
         </div>
         <button 
           onClick={handleLogout}
           className="p-3 md:p-4 rounded-2xl glass text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
-          title="Sign out"
+          title="Đăng xuất"
         >
           <LogOut size={20} className="md:w-6 md:h-6" />
         </button>
@@ -82,8 +82,8 @@ export function Home() {
               <Users size={24} className="md:w-10 md:h-10" />
             </div>
             <div className="text-center md:text-left">
-              <h3 className="font-bold text-sm md:text-2xl text-white">Create Group</h3>
-              <p className="text-[11px] md:text-lg text-gray-400 mt-1 md:mt-1.5 hidden md:block">Start a new sync space</p>
+              <h3 className="font-bold text-sm md:text-2xl text-white">Tạo Nhóm</h3>
+              <p className="text-[11px] md:text-lg text-gray-400 mt-1 md:mt-1.5 hidden md:block">Bắt đầu kết nối lịch rảnh</p>
             </div>
           </div>
           <ArrowRight className="hidden md:block text-gray-500 group-hover:text-white transition-colors md:w-8 md:h-8 shrink-0" />
@@ -99,8 +99,8 @@ export function Home() {
               <CalendarPlus size={24} className="md:w-10 md:h-10" />
             </div>
             <div className="text-center md:text-left">
-              <h3 className="font-bold text-sm md:text-2xl text-white">Join via Code</h3>
-              <p className="text-[11px] md:text-lg text-gray-400 mt-1 md:mt-1.5 hidden md:block">Enter an invite code</p>
+              <h3 className="font-bold text-sm md:text-2xl text-white">Tham Gia Nhóm</h3>
+              <p className="text-[11px] md:text-lg text-gray-400 mt-1 md:mt-1.5 hidden md:block">Nhập mã mời tham gia</p>
             </div>
           </div>
           <ArrowRight className="hidden md:block text-gray-500 group-hover:text-white transition-colors md:w-8 md:h-8 shrink-0" />
@@ -111,7 +111,7 @@ export function Home() {
         <div className="absolute -top-20 -right-20 w-64 h-64 bg-primary/20 blur-[100px] rounded-full"></div>
         <h4 className="font-semibold text-sm md:text-xl text-gray-300 mb-8 flex items-center gap-3 relative z-10">
           <span className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-primary animate-pulse"></span>
-          Today's Matches
+          Lịch Khớp Hôm Nay
         </h4>
         
         {isLoading ? (
@@ -124,10 +124,10 @@ export function Home() {
                <Coffee size={28} className="text-gray-500 md:w-10 md:h-10" />
             </div>
             <p className="text-base md:text-xl text-gray-300 font-medium leading-relaxed mb-2 md:mb-3">
-              No perfect matches today!
+              Hôm nay không có lịch khớp hoàn hảo nào!
             </p>
             <p className="text-sm md:text-base text-gray-500">
-              Enjoy your free time or schedule a new meetup.
+              Hãy tận hưởng thời gian rảnh rỗi hoặc lên lịch hẹn mới.
             </p>
           </div>
         ) : (

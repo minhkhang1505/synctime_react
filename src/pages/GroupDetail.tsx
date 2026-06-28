@@ -30,11 +30,11 @@ export function GroupDetail() {
     mutationFn: deleteGroup,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['groups'] });
-      toast.success('Group deleted successfully!');
+      toast.success('Đã xóa nhóm thành công!');
       navigate('/groups');
     },
     onError: (err: any) => {
-      toast.error(err.message || 'Failed to delete group');
+      toast.error(err.message || 'Không thể xóa nhóm');
     }
   });
 
@@ -57,13 +57,13 @@ export function GroupDetail() {
         <div className="lg:col-span-7 flex flex-col gap-6 md:gap-8">
           <div className="glass p-5 md:p-12 rounded-[24px] md:rounded-[48px] border border-white/5 shadow-2xl relative overflow-hidden">
             <div className="absolute -top-10 -right-10 w-48 h-48 md:w-64 md:h-64 bg-primary/10 blur-[80px] rounded-full"></div>
-            <p className="text-xs md:text-lg text-gray-400 mb-2 md:mb-4 font-bold uppercase tracking-widest relative z-10">Invite Code</p>
+            <p className="text-xs md:text-lg text-gray-400 mb-2 md:mb-4 font-bold uppercase tracking-widest relative z-10">Mã Mời</p>
             <div className="flex items-center justify-between relative z-10">
               <span className="text-3xl md:text-6xl font-mono font-bold tracking-[0.2em] text-primary">{group.invite_code.toUpperCase()}</span>
               <button 
                 onClick={() => {
                   navigator.clipboard.writeText(group.invite_code);
-                  toast.success('Invite code copied!');
+                  toast.success('Đã sao chép mã mời!');
                 }} 
                 className="p-3 md:p-6 rounded-xl md:rounded-[24px] bg-white/5 hover:bg-white/10 text-gray-300 transition-colors border border-white/10 active:scale-95 shrink-0"
               >
@@ -75,22 +75,22 @@ export function GroupDetail() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-6">
             <Link to={`/availability/${group.id}`} className="flex-1 glass p-4 md:p-8 rounded-[20px] md:rounded-[36px] flex flex-col items-center justify-center gap-3 md:gap-4 hover:bg-card/80 transition-all border border-white/5 hover:scale-[1.02] shadow-xl text-center">
               <div className="p-3 md:p-5 bg-blue-500/20 text-blue-400 rounded-xl md:rounded-2xl shadow-inner"><CalendarIcon size={22} className="md:w-8 md:h-8" /></div>
-              <span className="text-[13px] md:text-base font-bold text-white leading-tight">Set Availability</span>
+              <span className="text-[13px] md:text-base font-bold text-white leading-tight">Lịch Rảnh</span>
             </Link>
             <Link to={`/match/${group.id}`} className="flex-1 glass p-4 md:p-8 rounded-[20px] md:rounded-[36px] flex flex-col items-center justify-center gap-3 md:gap-4 hover:bg-card/80 transition-all border border-white/5 hover:scale-[1.02] shadow-xl text-center">
               <div className="p-3 md:p-5 bg-purple-500/20 text-purple-400 rounded-xl md:rounded-2xl shadow-inner"><Users size={22} className="md:w-8 md:h-8" /></div>
-              <span className="text-[13px] md:text-base font-bold text-white leading-tight">View Matches</span>
+              <span className="text-[13px] md:text-base font-bold text-white leading-tight">Lịch Khớp</span>
             </Link>
             <Link to={`/payments/${group.id}`} className="flex-1 glass p-4 md:p-8 rounded-[20px] md:rounded-[36px] flex flex-col items-center justify-center gap-3 md:gap-4 hover:bg-card/80 transition-all border border-white/5 hover:scale-[1.02] shadow-xl text-center">
               <div className="p-3 md:p-5 bg-emerald-500/20 text-emerald-400 rounded-xl md:rounded-2xl shadow-inner"><CreditCard size={22} className="md:w-8 md:h-8" /></div>
-              <span className="text-[13px] md:text-base font-bold text-white leading-tight">Payments & Bills</span>
+              <span className="text-[13px] md:text-base font-bold text-white leading-tight">Chi Tiêu & Hóa Đơn</span>
             </Link>
           </div>
 
           {isOwner && (
             <button
               onClick={() => {
-                if (confirm('Are you sure you want to permanently delete this group? This cannot be undone.')) {
+                if (confirm('Bạn có chắc chắn muốn xóa nhóm này vĩnh viễn? Thao tác này không thể hoàn tác.')) {
                   deleteMutation.mutate(group.id);
                 }
               }}
@@ -98,7 +98,7 @@ export function GroupDetail() {
               className="w-full py-4 md:py-5 rounded-[20px] md:rounded-[40px] bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 text-red-400 font-bold text-sm md:text-lg flex items-center justify-center gap-2.5 transition-all shadow-xl active:scale-[0.98]"
             >
               <Trash2 size={20} className="md:w-6 md:h-6" />
-              {deleteMutation.isPending ? 'Deleting Group...' : 'Delete Group'}
+              {deleteMutation.isPending ? 'Đang xóa nhóm...' : 'Xóa Nhóm'}
             </button>
           )}
         </div>
@@ -107,7 +107,7 @@ export function GroupDetail() {
         <div className="lg:col-span-5">
           <div className="glass p-6 md:p-10 rounded-[32px] md:rounded-[48px] border border-white/5 h-full flex flex-col">
             <h3 className="font-bold text-xl md:text-2xl mb-6 md:mb-8 text-white flex items-center justify-between">
-              Members 
+              Thành viên 
               <span className="text-sm md:text-lg px-3 py-1 md:px-4 md:py-1.5 bg-white/10 rounded-full font-bold">{members?.length || 0}</span>
             </h3>
             
@@ -127,8 +127,8 @@ export function GroupDetail() {
                       )}
                     </div>
                     <div className="flex-1 overflow-hidden">
-                      <p className="font-bold text-[16px] md:text-[20px] text-white truncate">{member.profiles.full_name || 'Unknown User'}</p>
-                      <p className="text-sm md:text-base text-gray-500 mt-1 font-medium">Joined {new Date(member.joined_at).toLocaleDateString()}</p>
+                      <p className="font-bold text-[16px] md:text-[20px] text-white truncate">{member.profiles.full_name || 'Người dùng ẩn danh'}</p>
+                      <p className="text-sm md:text-base text-gray-500 mt-1 font-medium">Đã tham gia {new Date(member.joined_at).toLocaleDateString('vi-VN')}</p>
                     </div>
                   </div>
                 ))}

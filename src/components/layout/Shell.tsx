@@ -15,9 +15,9 @@ export function Shell() {
   const count = unreadCount();
 
   const navItems = [
-    { icon: HomeIcon, label: "Home", path: "/" },
-    { icon: Users, label: "Groups", path: "/groups" },
-    { icon: Bell, label: "Notifications", path: "/notifications", badge: count > 0 ? count : null },
+    { icon: HomeIcon, label: "Trang chủ", path: "/" },
+    { icon: Users, label: "Nhóm", path: "/groups" },
+    { icon: Bell, label: "Thông báo", path: "/notifications", badge: count > 0 ? count : null },
   ];
 
   return (

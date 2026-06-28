@@ -3,6 +3,7 @@ import { useNotificationStore } from '../store/useNotificationStore';
 import { Check, Trash2, Bell } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
+import { vi } from 'date-fns/locale';
 
 export function Notifications() {
   const { 
@@ -24,9 +25,9 @@ export function Notifications() {
         <div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent flex items-center gap-3">
             <Bell className="text-blue-400" size={32} />
-            Notifications
+            Thông báo
           </h1>
-          <p className="text-gray-400 mt-2">Stay updated with your group activities</p>
+          <p className="text-gray-400 mt-2">Cập nhật các hoạt động mới nhất từ các nhóm của bạn</p>
         </div>
         
         <div className="flex items-center gap-3">
@@ -36,7 +37,7 @@ export function Notifications() {
             disabled={notifications.length === 0}
           >
             <Check size={18} />
-            <span className="text-sm font-medium">Mark all read</span>
+            <span className="text-sm font-medium">Đọc tất cả</span>
           </button>
           <button
             onClick={() => clearNotifications()}
@@ -44,7 +45,7 @@ export function Notifications() {
             disabled={notifications.length === 0}
           >
             <Trash2 size={18} />
-            <span className="text-sm font-medium">Clear all</span>
+            <span className="text-sm font-medium">Xóa tất cả</span>
           </button>
         </div>
       </div>
@@ -59,8 +60,8 @@ export function Notifications() {
             <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-4">
               <Bell className="text-gray-500" size={24} />
             </div>
-            <h3 className="text-xl font-semibold text-gray-300">No notifications yet</h3>
-            <p className="text-gray-500 mt-2">You're all caught up!</p>
+            <h3 className="text-xl font-semibold text-gray-300">Chưa có thông báo nào</h3>
+            <p className="text-gray-500 mt-2">Hộp thư của bạn đang trống!</p>
           </div>
         ) : (
           notifications.map((notification) => (
@@ -87,7 +88,7 @@ export function Notifications() {
                 </h4>
                 <p className="text-gray-400 text-sm leading-relaxed">{notification.message}</p>
                 <div className="text-xs text-gray-500 mt-3 font-medium">
-                  {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+                  {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true, locale: vi })}
                 </div>
               </div>
             </div>

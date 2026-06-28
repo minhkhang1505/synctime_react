@@ -5,6 +5,7 @@ import { fetchAvailability, subscribeToAvailability } from '../features/schedule
 import { fetchGroupMembers } from '../features/groups/api/groups-api';
 import { ArrowLeft, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format, addDays, startOfToday, isSameDay, startOfWeek } from 'date-fns';
+import { vi } from 'date-fns/locale';
 
 export function Match() {
   const { id } = useParams<{ id: string }>();
@@ -43,9 +44,9 @@ export function Match() {
   }, {} as Record<string, Set<string>>) || {};
 
   const TIME_BLOCKS = [
-    { label: 'MOR', start: '08:00:00' },
-    { label: 'AFT', start: '13:00:00' },
-    { label: 'EVE', start: '18:00:00' },
+    { label: 'Sáng', start: '08:00:00' },
+    { label: 'Chiều', start: '13:00:00' },
+    { label: 'Tối', start: '18:00:00' },
   ];
 
   const today = startOfToday();
@@ -65,10 +66,10 @@ export function Match() {
         <button onClick={() => navigate(-1)} className="p-2 md:p-3 rounded-xl md:rounded-2xl glass text-gray-400 hover:text-white transition-colors">
           <ArrowLeft size={20} className="md:w-6 md:h-6" />
         </button>
-        <h2 className="text-2xl md:text-4xl font-bold tracking-tight flex-1">Heatmap</h2>
+        <h2 className="text-2xl md:text-4xl font-bold tracking-tight flex-1">Biểu Đồ Lịch Khớp</h2>
         <div className="flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm md:text-base font-bold">
           <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-          Live
+          Trực tiếp
         </div>
       </div>
 
@@ -80,7 +81,7 @@ export function Match() {
           <ChevronLeft size={20} className="md:w-6 md:h-6" />
         </button>
         <span className="font-bold text-[14px] md:text-lg text-gray-200">
-          {format(dates[0], 'MMM d')} - {format(dates[6], 'MMM d, yyyy')}
+          {format(dates[0], 'd MMM', { locale: vi })} - {format(dates[6], 'd MMM, yyyy', { locale: vi })}
         </span>
         <button 
           onClick={() => { setPageOffset(prev => prev + 1); setSelectedCell(null); }}
@@ -113,7 +114,7 @@ export function Match() {
                   {dates.map((date, i) => (
                     <div key={i} className="flex flex-col gap-1.5 md:gap-4">
                       <div className="h-10 md:h-16 flex flex-col items-center justify-center">
-                        <span className="text-[9px] md:text-sm uppercase font-bold text-gray-500 leading-tight md:mb-1">{format(date, 'EEE')}</span>
+                        <span className="text-[9px] md:text-sm uppercase font-bold text-gray-500 leading-tight md:mb-1">{format(date, 'EEEE', { locale: vi })}</span>
                         <span className={`text-[13px] md:text-xl font-bold mt-0.5 ${isSameDay(date, new Date()) ? 'text-primary' : 'text-gray-200'}`}>
                           {format(date, 'd')}
                         </span>
@@ -133,7 +134,7 @@ export function Match() {
                             key={tb.label}
                             onClick={() => setSelectedCell({ date: dateStr, label: tb.label, userIds })}
                             className={`w-10 h-10 md:w-20 md:h-20 rounded-xl md:rounded-[20px] border transition-all duration-300 flex items-center justify-center relative hover:scale-105 ${getColorClass(count, totalMembers)} ${isSelected ? 'ring-2 md:ring-4 ring-primary ring-offset-2 md:ring-offset-4 ring-offset-transparent' : ''}`}
-                            title={`${count}/${totalMembers} members free`}
+                            title={`${count}/${totalMembers} thành viên rảnh`}
                           >
                             {isPerfect && <Sparkles size={10} className="md:w-6 md:h-6 absolute -top-1 -right-1 md:-top-2 md:-right-2 text-yellow-400 animate-pulse drop-shadow-md" />}
                             {count > 0 && (
@@ -149,9 +150,9 @@ export function Match() {
             </div>
             
             <div className="mt-4 md:mt-8 pt-4 md:pt-8 border-t border-white/5 flex items-center justify-center gap-4 md:gap-8 text-[10px] md:text-sm font-bold text-gray-400 uppercase tracking-widest flex-wrap">
-              <div className="flex items-center gap-1.5 md:gap-3"><div className="w-3 h-3 md:w-5 md:h-5 rounded md:rounded-md bg-white/5 border border-white/10"></div> 0</div>
-              <div className="flex items-center gap-1.5 md:gap-3"><div className="w-3 h-3 md:w-5 md:h-5 rounded md:rounded-md bg-amber-500/20 border border-amber-500/30"></div> Wait</div>
-              <div className="flex items-center gap-1.5 md:gap-3"><div className="w-3 h-3 md:w-5 md:h-5 rounded md:rounded-md bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div> Match</div>
+              <div className="flex items-center gap-1.5 md:gap-3"><div className="w-3 h-3 md:w-5 md:h-5 rounded md:rounded-md bg-white/5 border border-white/10"></div> Bận</div>
+              <div className="flex items-center gap-1.5 md:gap-3"><div className="w-3 h-3 md:w-5 md:h-5 rounded md:rounded-md bg-amber-500/20 border border-amber-500/30"></div> Khớp 1 phần</div>
+              <div className="flex items-center gap-1.5 md:gap-3"><div className="w-3 h-3 md:w-5 md:h-5 rounded md:rounded-md bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div> Khớp hoàn hảo</div>
             </div>
           </div>
 
@@ -159,13 +160,13 @@ export function Match() {
             <div className="bg-black/20 p-6 md:p-10 border-t lg:border-t-0 lg:border-l border-white/5 animate-in fade-in slide-in-from-top-2 lg:slide-in-from-right-8 lg:slide-in-from-top-0 lg:w-[320px] xl:w-[380px] shrink-0">
               <div className="flex items-center justify-between mb-4 lg:mb-8">
                 <h4 className="text-[13px] md:text-lg font-bold text-primary tracking-wide">
-                  {format(new Date(selectedCell.date), 'EEE, MMM d')} <span className="mx-2 text-white/20">•</span> {selectedCell.label}
+                  {format(new Date(selectedCell.date), 'EEEE, d MMM', { locale: vi })} <span className="mx-2 text-white/20">•</span> {selectedCell.label}
                 </h4>
-                <span className="text-xs md:text-base text-gray-400 font-bold tracking-wider shrink-0 ml-2">{selectedCell.userIds.size}/{totalMembers} FREE</span>
+                <span className="text-xs md:text-base text-gray-400 font-bold tracking-wider shrink-0 ml-2">{selectedCell.userIds.size}/{totalMembers} RẢNH</span>
               </div>
               
               {selectedCell.userIds.size === 0 ? (
-                <p className="text-sm md:text-base text-gray-500 font-medium mt-2">No members are free at this time.</p>
+                <p className="text-sm md:text-base text-gray-500 font-medium mt-2">Không có thành viên nào rảnh vào lúc này.</p>
               ) : (
                 <div className="flex flex-wrap gap-3 md:gap-4 mt-2 lg:flex-col">
                   {(() => {
