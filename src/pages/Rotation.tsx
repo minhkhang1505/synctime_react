@@ -252,12 +252,24 @@ export function Rotation() {
 
   const formatCompactAmount = (amount: number) => {
     if (amount >= 1000000) {
-      return `${(amount / 1000000).toFixed(1)}tr`;
+      const millions = amount / 1000000;
+      if (millions % 1 === 0) {
+        return `${millions.toFixed(0)}tr`;
+      } else {
+        const rounded = Number(millions.toFixed(3));
+        return `${rounded}tr`;
+      }
     }
     if (amount >= 1000) {
-      return `${(amount / 1000).toFixed(0)}k`;
+      const thousands = amount / 1000;
+      if (thousands % 1 === 0) {
+        return `${thousands.toFixed(0)}k`;
+      } else {
+        const rounded = Number(thousands.toFixed(3));
+        return `${rounded}k`;
+      }
     }
-    return `${amount}`;
+    return `${Number(amount.toFixed(3))}`;
   };
 
   if (isGroupsLoading) {
