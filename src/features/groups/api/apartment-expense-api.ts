@@ -41,6 +41,7 @@ export interface MemberSpaceAllocation {
   activeDaysInMonth: number; // Số ngày ở trong tháng (mặc định 30)
   customElectricityKwh: number | null; // Số kWh riêng (nếu có công tơ phụ)
   vehiclesCount: number; // Số lượng xe gửi
+  includeParkingFee?: boolean; // Bật/Tắt tính phí gửi xe vào hóa đơn (mặc định true)
 }
 
 export interface SpecialAppliance {
@@ -63,6 +64,7 @@ export interface MemberExpenseBreakdown {
   sharedElectricityShare: number; // Tiền điện dùng chung (theo số ngày ở)
   totalElectricityShare: number; // Tổng tiền điện
   parkingShare: number; // Phí gửi xe
+  includeParkingFee: boolean; // Trạng thái bật/tắt cộng phí gửi xe vào hóa đơn
   grandTotal: number; // Tổng cộng phải trả
 }
 
@@ -191,8 +193,9 @@ export function calculateApartmentExpenses(
 
     const totalElectricityShare = applianceElectricityShare + sharedElectricityShare;
 
-    // g. Phí gửi xe
-    const parkingShare = member.vehiclesCount * config.parkingFeePerVehicle;
+    // g. Phí gửi xe (Chỉ cộng vào hóa đơn nếu includeParkingFee !== false)
+    const includeParkingFee = member.includeParkingFee !== false;
+    const parkingShare = includeParkingFee ? member.vehiclesCount * config.parkingFeePerVehicle : 0;
 
     // h. Tổng tiền
     const grandTotal = rentShare + managementFeeShare + waterShare + totalElectricityShare + parkingShare;
@@ -210,6 +213,7 @@ export function calculateApartmentExpenses(
       sharedElectricityShare,
       totalElectricityShare,
       parkingShare,
+      includeParkingFee,
       grandTotal
     };
   });
@@ -272,7 +276,12 @@ export function getStoredSpaceAllocations(groupId: string, defaultMembers: Array
       return defaultMembers.map(dm => {
         const existing = parsed.find(p => p.userId === dm.userId);
         if (existing) {
-          return { ...existing, memberName: dm.name, avatarUrl: dm.avatarUrl };
+          return {
+            ...existing,
+            memberName: dm.name,
+            avatarUrl: dm.avatarUrl,
+            includeParkingFee: existing.includeParkingFee !== false
+          };
         }
         return {
           userId: dm.userId,
@@ -284,6 +293,7 @@ export function getStoredSpaceAllocations(groupId: string, defaultMembers: Array
           activeDaysInMonth: 30,
           customElectricityKwh: null,
           vehiclesCount: 1,
+          includeParkingFee: true,
         };
       });
     } catch (e) {
@@ -300,6 +310,7 @@ export function getStoredSpaceAllocations(groupId: string, defaultMembers: Array
     activeDaysInMonth: 30,
     customElectricityKwh: null,
     vehiclesCount: 1,
+    includeParkingFee: true,
   }));
 }
 

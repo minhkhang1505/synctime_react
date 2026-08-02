@@ -204,6 +204,17 @@ export function ApartmentExpenseManager() {
     toast.success('Đã cập nhật danh sách thiết bị điện!');
   };
 
+  const handleToggleMemberParking = (targetUserId: string) => {
+    const updated = allocations.map(a => {
+      if (a.userId === targetUserId) {
+        const currentVal = a.includeParkingFee !== false;
+        return { ...a, includeParkingFee: !currentVal };
+      }
+      return a;
+    });
+    handleSaveAllocations(updated);
+  };
+
   // Calculation Report
   const report = useMemo(() => {
     if (!config || allocations.length === 0) return null;
@@ -285,7 +296,11 @@ export function ApartmentExpenseManager() {
       text += `   - Phí quản lý (${formatVNNumber(b.allocatedAreaM2)}m²): ${formatVND(b.managementFeeShare)}\n`;
       text += `   - Tiền điện: ${formatVND(b.totalElectricityShare)} (Chung: ${formatVND(b.sharedElectricityShare)}${b.applianceElectricityShare > 0 ? ` + TB riêng: ${formatVND(b.applianceElectricityShare)}` : ''})\n`;
       text += `   - Tiền nước: ${formatVND(b.waterShare)}\n`;
-      if (b.parkingShare > 0) text += `   - Phí gửi xe: ${formatVND(b.parkingShare)}\n`;
+      if (b.includeParkingFee && b.parkingShare > 0) {
+        text += `   - Phí gửi xe: ${formatVND(b.parkingShare)}\n`;
+      } else if (!b.includeParkingFee) {
+        text += `   - Phí gửi xe: 0 đ (Tắt / Thanh toán riêng)\n`;
+      }
       text += `   👉 *TỔNG CỘNG: ${formatVND(b.grandTotal)}*\n\n`;
     });
 
@@ -538,12 +553,32 @@ export function ApartmentExpenseManager() {
                         </div>
                       </div>
 
-                      {item.parkingShare > 0 && (
-                        <div className="flex justify-between items-center text-gray-300">
+                      {/* Parking Fee Toggle Switch Row */}
+                      <div className="flex justify-between items-center text-gray-300 pt-1">
+                        <div className="flex items-center gap-2">
                           <span className="text-gray-400">Phí giữ xe:</span>
-                          <span className="font-semibold text-white">{formatVND(item.parkingShare)}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleMemberParking(item.userId)}
+                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              item.includeParkingFee ? 'bg-emerald-500' : 'bg-gray-600'
+                            }`}
+                            title={item.includeParkingFee ? 'Đang cộng phí xe vào tổng hoá đơn' : 'Đã tắt cộng phí xe vào hóa đơn'}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                item.includeParkingFee ? 'translate-x-4' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                          <span className="text-[11px] text-gray-400 font-mono">
+                            {item.includeParkingFee ? `(Bật)` : '(Tắt)'}
+                          </span>
                         </div>
-                      )}
+                        <span className={`font-semibold ${item.includeParkingFee ? 'text-white' : 'text-gray-500 line-through'}`}>
+                          {item.includeParkingFee ? formatVND(item.parkingShare) : '0 đ'}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
