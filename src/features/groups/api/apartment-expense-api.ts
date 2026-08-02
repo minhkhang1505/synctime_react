@@ -74,6 +74,9 @@ export interface ApartmentExpenseReport {
   effectiveKwhPrice: number; // Đơn giá điện trung bình thực tế / kWh
   totalWaterCost: number;
   totalManagementCost: number;
+  autoLivingRoomM2: number; // Diện tích phòng khách / dùng chung (tự động = Tổng diện tích - Tổng diện tích riêng)
+  sharedLivingRoomPerMember: number; // Diện tích dùng chung chia cho từng người
+  totalPrivateArea: number; // Tổng diện tích phòng riêng của tất cả thành viên
   breakdowns: MemberExpenseBreakdown[];
 }
 
@@ -142,14 +145,20 @@ export function calculateApartmentExpenses(
   // 3. Tính tổng số ngày ở của tất cả thành viên
   const totalActiveDays = members.reduce((sum, m) => sum + (m.activeDaysInMonth || 0), 0) || 1;
 
-  // 4. Tổng nước & quản lý
+  // 4. Tổng nước & Phí quản lý căn hộ
   const totalWaterCost = config.waterTotalM3 * config.waterFeePerM3;
+  const totalManagementCost = config.totalAreaM2 * config.managementFeePerM2;
 
-  // 5. Tính toán chi tiết cho từng thành viên
+  // 5. Tự động tính diện tích dùng chung (Phòng khách = Tổng diện tích căn hộ - Tổng diện tích riêng)
+  const totalPrivateArea = members.reduce((sum, m) => sum + (m.bedroomM2 || 0) + (m.bathroomM2 || 0), 0);
+  const autoLivingRoomM2 = Math.max(0, config.totalAreaM2 - totalPrivateArea);
+  const sharedLivingRoomPerMember = autoLivingRoomM2 / memberCount;
+
+  // 6. Tính toán chi tiết cho từng thành viên
   const breakdowns: MemberExpenseBreakdown[] = members.map(member => {
-    // a. Diện tích quy đổi: Phòng ngủ riêng + (Phòng khách + WC dùng chung / số người)
-    const sharedAreaPart = (member.livingRoomM2 + member.bathroomM2) / memberCount;
-    const allocatedAreaM2 = member.bedroomM2 + sharedAreaPart;
+    // a. Diện tích quy đổi cá nhân = Diện tích phòng riêng + (Diện tích dùng chung tự động / số người)
+    const privateArea = (member.bedroomM2 || 0) + (member.bathroomM2 || 0);
+    const allocatedAreaM2 = privateArea + sharedLivingRoomPerMember;
 
     // b. Tiền thuê nhà theo tỷ lệ diện tích quy đổi
     const rentShare = config.totalAreaM2 > 0
@@ -205,8 +214,6 @@ export function calculateApartmentExpenses(
     };
   });
 
-  const totalManagementCost = breakdowns.reduce((sum, b) => sum + b.managementFeeShare, 0);
-
   return {
     config,
     totalApplianceKwh,
@@ -215,6 +222,9 @@ export function calculateApartmentExpenses(
     effectiveKwhPrice,
     totalWaterCost,
     totalManagementCost,
+    autoLivingRoomM2,
+    sharedLivingRoomPerMember,
+    totalPrivateArea,
     breakdowns
   };
 }
