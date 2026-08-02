@@ -553,17 +553,64 @@ export async function fetchSpecialAppliancesFromDb(groupId: string): Promise<Spe
 export async function saveSpecialAppliancesToDb(groupId: string, appliances: SpecialAppliance[]): Promise<void> {
   saveSpecialAppliances(groupId, appliances);
   try {
-    // Delete missing items and upsert active items
-    const rows = appliances.map(a => ({
-      id: a.id.startsWith('app-') ? undefined : a.id,
-      group_id: groupId,
-      name: a.name,
-      kwh_consumed: a.kwhConsumed,
-      assigned_user_ids: a.assignedUserIds,
-      member_caps: a.memberCaps || {},
-      updated_at: new Date().toISOString()
-    }));
-    await supabase.from('special_appliances').upsert(rows);
+    // 1. Tìm các ID trong DB đã bị xóa từ UI để xóa trên Supabase
+    const { data: existingDbItems } = await supabase
+      .from('special_appliances')
+      .select('id')
+      .eq('group_id', groupId);
+
+    const activeIds = appliances
+      .map(a => a.id)
+      .filter(id => id && !id.startsWith('app-'));
+
+    if (existingDbItems && existingDbItems.length > 0) {
+      const idsToDelete = existingDbItems
+        .map(item => item.id)
+        .filter(id => !activeIds.includes(id));
+
+      if (idsToDelete.length > 0) {
+        await supabase
+          .from('special_appliances')
+          .delete()
+          .in('id', idsToDelete);
+      }
+    }
+
+    // 2. Upsert danh sách thiết bị bao gồm memberCaps mốc kWh
+    if (appliances.length > 0) {
+      const rowsToUpsert = appliances.map(a => {
+        const row: any = {
+          group_id: groupId,
+          name: a.name,
+          kwh_consumed: a.kwhConsumed,
+          assigned_user_ids: a.assignedUserIds || [],
+          member_caps: a.memberCaps || {},
+          updated_at: new Date().toISOString()
+        };
+        if (a.id && !a.id.startsWith('app-')) {
+          row.id = a.id;
+        }
+        return row;
+      });
+
+      const { data: upsertedData, error } = await supabase
+        .from('special_appliances')
+        .upsert(rowsToUpsert)
+        .select();
+
+      if (error) {
+        console.warn('Supabase special_appliances error (vui lòng chạy script SQL mới):', error);
+      } else if (upsertedData) {
+        const syncedAppliances: SpecialAppliance[] = upsertedData.map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          kwhConsumed: Number(row.kwh_consumed),
+          assignedUserIds: Array.isArray(row.assigned_user_ids) ? row.assigned_user_ids : [],
+          memberCaps: row.member_caps || {}
+        }));
+        saveSpecialAppliances(groupId, syncedAppliances);
+      }
+    }
   } catch (err) {
     console.warn('Could not save special appliances to Supabase:', err);
   }
