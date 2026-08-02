@@ -9,6 +9,7 @@ import { Availability } from "./pages/Availability";
 import { Match } from "./pages/Match";
 import { Notifications } from "./pages/Notifications";
 import { Rotation } from "./pages/Rotation";
+import { ApartmentExpenseManager } from "./pages/ApartmentExpenseManager";
 import { AuthProvider } from "./features/auth/components/AuthProvider";
 
 const queryClient = new QueryClient();
@@ -23,6 +24,7 @@ function App() {
               <Route index element={<Home />} />
               <Route path="groups" element={<Groups />} />
               <Route path="groups/:id" element={<GroupDetail />} />
+              <Route path="groups/:id/apartment-expenses" element={<ApartmentExpenseManager />} />
               <Route path="availability/:id" element={<Availability />} />
               <Route path="match/:id" element={<Match />} />
               <Route path="notifications" element={<Notifications />} />

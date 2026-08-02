@@ -2,6 +2,9 @@
 
 ## 1. Purpose
 Define the data structures, relationships, security policies (RLS), and optimization strategies for PostgreSQL on Supabase.
+> [!TIP]
+> Xem tài liệu trực quan hóa chi tiết với biểu đồ Mermaid ERD và phân hệ module tại [database_visualization.md](file:///Users/nguyenminhkhang/Documents/react/group-scheduler/docs/database/database_visualization.md).
+
 
 ## 2. Entity Relationship Diagram (ERD)
 ```mermaid
