@@ -10,12 +10,14 @@ import {
   DEFAULT_EVN_TIERS,
   calculateApartmentExpenses,
   calculateEVNElectricityCost,
+  calculateApplianceKwhSplit,
   getStoredApartmentConfig,
-  saveApartmentConfig,
-  getStoredSpaceAllocations,
-  saveSpaceAllocations,
-  getStoredSpecialAppliances,
-  saveSpecialAppliances
+  fetchApartmentConfigFromDb,
+  saveApartmentConfigToDb,
+  fetchSpaceAllocationsFromDb,
+  saveSpaceAllocationsToDb,
+  fetchSpecialAppliancesFromDb,
+  saveSpecialAppliancesToDb
 } from '../features/groups/api/apartment-expense-api';
 import {
   ArrowLeft,
@@ -30,7 +32,6 @@ import {
   DollarSign,
   Sliders,
   Copy,
-  CheckCircle2,
   Sparkles,
   ShieldCheck,
   Tv
@@ -165,43 +166,55 @@ export function ApartmentExpenseManager() {
   const [applianceName, setApplianceName] = useState('');
   const [applianceKwh, setApplianceKwh] = useState<number>(100);
   const [applianceUsers, setApplianceUsers] = useState<string[]>([]);
+  const [applianceMemberCaps, setApplianceMemberCaps] = useState<Record<string, number | null>>({});
 
   // Load saved data when groupId or defaultMemberList changes
   useEffect(() => {
     if (!groupId) return;
-    const loadedConfig = getStoredApartmentConfig(groupId);
-    setConfig(loadedConfig);
 
-    if (defaultMemberList.length > 0) {
-      const loadedAllocations = getStoredSpaceAllocations(groupId, defaultMemberList);
-      setAllocations(loadedAllocations);
+    let isMounted = true;
+    const loadData = async () => {
+      // 1. Config
+      const loadedConfig = await fetchApartmentConfigFromDb(groupId);
+      if (isMounted && loadedConfig) setConfig(loadedConfig);
 
-      const loadedAppliances = getStoredSpecialAppliances(groupId);
-      // Ensure all appliances have valid assignedUserIds
-      setAppliances(loadedAppliances.map(a => ({
-        ...a,
-        assignedUserIds: a.assignedUserIds || []
-      })));
-    }
+      if (defaultMemberList.length > 0) {
+        // 2. Member space allocations
+        const loadedAllocations = await fetchSpaceAllocationsFromDb(groupId, defaultMemberList);
+        if (isMounted) setAllocations(loadedAllocations);
+
+        // 3. Special appliances
+        const loadedAppliances = await fetchSpecialAppliancesFromDb(groupId);
+        if (isMounted) {
+          setAppliances(loadedAppliances.map(a => ({
+            ...a,
+            assignedUserIds: a.assignedUserIds || []
+          })));
+        }
+      }
+    };
+
+    loadData();
+    return () => { isMounted = false; };
   }, [groupId, defaultMemberList]);
 
   // Save changes
   const handleSaveConfig = (newConfig: ApartmentConfig) => {
     setConfig(newConfig);
-    saveApartmentConfig(newConfig);
-    toast.success('Đã lưu cấu hình đơn giá căn hộ!');
+    saveApartmentConfigToDb(newConfig);
+    toast.success('Đã lưu cấu hình đơn giá lên hệ thống!');
   };
 
   const handleSaveAllocations = (newAllocations: MemberSpaceAllocation[]) => {
     setAllocations(newAllocations);
-    if (groupId) saveSpaceAllocations(groupId, newAllocations);
-    toast.success('Đã cập nhật phân bổ diện tích & số ngày ở!');
+    if (groupId) saveSpaceAllocationsToDb(groupId, newAllocations);
+    toast.success('Đã lưu phân bổ diện tích & số ngày ở!');
   };
 
   const handleSaveAppliances = (newAppliances: SpecialAppliance[]) => {
     setAppliances(newAppliances);
-    if (groupId) saveSpecialAppliances(groupId, newAppliances);
-    toast.success('Đã cập nhật danh sách thiết bị điện!');
+    if (groupId) saveSpecialAppliancesToDb(groupId, newAppliances);
+    toast.success('Đã lưu danh sách thiết bị điện lên hệ thống!');
   };
 
   const handleToggleMemberParking = (targetUserId: string) => {
@@ -227,6 +240,7 @@ export function ApartmentExpenseManager() {
     setApplianceName('');
     setApplianceKwh(50);
     setApplianceUsers(defaultMemberList.map(m => m.userId)); // default all assigned
+    setApplianceMemberCaps({});
     setIsApplianceModalOpen(true);
   };
 
@@ -235,6 +249,7 @@ export function ApartmentExpenseManager() {
     setApplianceName(app.name);
     setApplianceKwh(app.kwhConsumed);
     setApplianceUsers(app.assignedUserIds);
+    setApplianceMemberCaps(app.memberCaps || {});
     setIsApplianceModalOpen(true);
   };
 
@@ -252,7 +267,7 @@ export function ApartmentExpenseManager() {
     if (editingApplianceId) {
       updated = appliances.map(a =>
         a.id === editingApplianceId
-          ? { ...a, name: applianceName, kwhConsumed: applianceKwh, assignedUserIds: applianceUsers }
+          ? { ...a, name: applianceName, kwhConsumed: applianceKwh, assignedUserIds: applianceUsers, memberCaps: applianceMemberCaps }
           : a
       );
     } else {
@@ -260,7 +275,8 @@ export function ApartmentExpenseManager() {
         id: `app-${Date.now()}`,
         name: applianceName,
         kwhConsumed: applianceKwh,
-        assignedUserIds: applianceUsers
+        assignedUserIds: applianceUsers,
+        memberCaps: applianceMemberCaps
       };
       updated = [...appliances, newAppliance];
     }
@@ -571,9 +587,6 @@ export function ApartmentExpenseManager() {
                               }`}
                             />
                           </button>
-                          <span className="text-[11px] text-gray-400 font-mono">
-                            {item.includeParkingFee ? `(Bật)` : '(Tắt)'}
-                          </span>
                         </div>
                         <span className={`font-semibold ${item.includeParkingFee ? 'text-white' : 'text-gray-500 line-through'}`}>
                           {item.includeParkingFee ? formatVND(item.parkingShare) : '0 đ'}
@@ -997,20 +1010,29 @@ export function ApartmentExpenseManager() {
                         </div>
                       </div>
 
-                      <div className="mt-3 pt-3 border-t border-white/10">
-                        <span className="text-xs text-gray-400 font-semibold block mb-2">Thành viên sử dụng thiết bị này:</span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {assignedMembers.length === 0 ? (
-                            <span className="text-xs text-red-400 italic">Chưa gán ai (tiền điện bị bỏ qua)</span>
-                          ) : (
-                            assignedMembers.map(m => (
-                              <span key={m.userId} className="text-xs font-semibold px-2.5 py-1 bg-amber-500/20 text-amber-300 rounded-lg border border-amber-500/30 flex items-center gap-1">
-                                <CheckCircle2 size={12} /> {m.name}
-                              </span>
-                            ))
-                          )}
-                        </div>
-                      </div>
+                      {/* Member kWh Allocation Breakdown */}
+                      {(() => {
+                        const splitMap = calculateApplianceKwhSplit(app);
+                        return (
+                          <div className="mt-3 pt-3 border-t border-white/10 space-y-1.5">
+                            <span className="text-xs text-gray-400 font-semibold block">Phân bổ kWh sử dụng thực tế:</span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                              {assignedMembers.map(m => {
+                                const kwhShare = splitMap[m.userId] || 0;
+                                const cap = app.memberCaps?.[m.userId];
+                                return (
+                                  <div key={m.userId} className="flex justify-between items-center bg-black/30 px-3 py-1.5 rounded-xl border border-white/5">
+                                    <span className="text-gray-300 truncate">{m.name}:</span>
+                                    <span className="font-bold text-amber-300 font-mono">
+                                      {formatVNNumber(kwhShare, 1)} kWh {cap ? `(Mốc ${formatVNNumber(cap)} kWh)` : ''}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 );
@@ -1025,7 +1047,7 @@ export function ApartmentExpenseManager() {
       {/* ========================================================================= */}
       {isApplianceModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in">
-          <div className="glass p-6 md:p-8 rounded-3xl border border-white/10 max-w-md w-full space-y-5 shadow-2xl">
+          <div className="glass p-6 md:p-8 rounded-3xl border border-white/10 max-w-lg w-full space-y-5 shadow-2xl">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <Zap className="text-amber-400" size={20} />
               {editingApplianceId ? 'Chỉnh Sửa Thiết Bị Điện' : 'Khai Báo Thiết Bị Điện Mới'}
@@ -1051,33 +1073,71 @@ export function ApartmentExpenseManager() {
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-2">
-                Gán thành viên trong nhóm sử dụng thiết bị này:
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-gray-300">
+                Gán thành viên & Mốc kWh dùng chung (nếu có người về sớm):
               </label>
-              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+
+              <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20 text-[11px] text-gray-300 space-y-1">
+                <span className="font-bold text-amber-300 block">💡 Cách tính khi có thành viên dùng mốc kWh dừng:</span>
+                <p>
+                  Ví dụ: Tổng là 67 kWh. Thành viên B về sớm chỉ dùng chung tới mốc 32 kWh thì nhập 32. Phần dôi ra 35 kWh còn lại sẽ tự động chia đều cho các thành viên khác.
+                </p>
+              </div>
+
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                 {defaultMemberList.map(m => {
                   const isAssigned = applianceUsers.includes(m.userId);
+                  const currentCap = applianceMemberCaps[m.userId];
                   return (
-                    <button
-                      type="button"
-                      key={m.userId}
-                      onClick={() => {
-                        if (isAssigned) {
-                          setApplianceUsers(applianceUsers.filter(id => id !== m.userId));
-                        } else {
-                          setApplianceUsers([...applianceUsers, m.userId]);
-                        }
-                      }}
-                      className={`w-full p-3 rounded-xl border text-left text-xs font-bold transition-all flex items-center justify-between ${
-                        isAssigned
-                          ? 'bg-amber-500/20 border-amber-500/50 text-white'
-                          : 'bg-black/30 border-white/10 text-gray-400 hover:text-white'
-                      }`}
-                    >
-                      <span>{m.name}</span>
-                      {isAssigned && <Check size={16} className="text-amber-400" />}
-                    </button>
+                    <div key={m.userId} className={`p-3 rounded-xl border transition-all space-y-2 ${
+                      isAssigned ? 'bg-amber-500/10 border-amber-500/30' : 'bg-black/30 border-white/10'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isAssigned) {
+                              setApplianceUsers(applianceUsers.filter(id => id !== m.userId));
+                            } else {
+                              setApplianceUsers([...applianceUsers, m.userId]);
+                            }
+                          }}
+                          className="flex items-center gap-2.5 text-xs font-bold text-white hover:text-amber-300 transition-colors"
+                        >
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                            isAssigned ? 'bg-amber-500 border-amber-500 text-black' : 'border-gray-500'
+                          }`}>
+                            {isAssigned && <Check size={12} />}
+                          </div>
+                          <span>{m.name}</span>
+                        </button>
+                        {isAssigned && (
+                          <span className="text-[11px] font-mono text-amber-300">
+                            {currentCap ? `Dùng mốc: ${formatVNNumber(currentCap)} kWh` : 'Dùng toàn bộ'}
+                          </span>
+                        )}
+                      </div>
+
+                      {isAssigned && (
+                        <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2 text-xs">
+                          <span className="text-gray-400">Mốc kWh dừng dùng (Leave blank if full):</span>
+                          <div className="w-40">
+                            <FormattedNumberInput
+                              value={currentCap ?? null}
+                              placeholder={`Toàn bộ (${formatVNNumber(applianceKwh)} kWh)`}
+                              onChange={val => {
+                                setApplianceMemberCaps(prev => ({
+                                  ...prev,
+                                  [m.userId]: val > 0 ? val : null
+                                }));
+                              }}
+                              className="w-full bg-black/50 border border-white/10 rounded-lg px-2.5 py-1 text-amber-300 font-bold text-xs focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>

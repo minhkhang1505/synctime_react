@@ -1,3 +1,5 @@
+import { supabase } from '../../../lib/supabase';
+
 export interface EVNTier {
   tier: number;
   name: string;
@@ -49,6 +51,7 @@ export interface SpecialAppliance {
   name: string; // Tên thiết bị: Máy lạnh P1, PC Gaming...
   kwhConsumed: number; // Số kWh tiêu thụ
   assignedUserIds: string[]; // Danh sách ID các thành viên sử dụng thiết bị
+  memberCaps?: Record<string, number | null>; // Mốc kWh dừng dùng của từng thành viên (ví dụ: { "user-b": 32 })
 }
 
 export interface MemberExpenseBreakdown {
@@ -117,6 +120,56 @@ export function calculateEVNElectricityCost(totalKwh: number, vatPercent: number
 }
 
 // ----------------------------------------------------
+// TÍNH TOÁN PHÂN BỔ KWH THIẾT BỊ ĐIỆN THEO MỐC DÙNG CHUNG
+// ----------------------------------------------------
+export function calculateApplianceKwhSplit(app: SpecialAppliance): Record<string, number> {
+  const totalKwh = app.kwhConsumed || 0;
+  const assignedIds = app.assignedUserIds || [];
+  const result: Record<string, number> = {};
+
+  if (totalKwh <= 0 || assignedIds.length === 0) {
+    return result;
+  }
+
+  assignedIds.forEach(id => { result[id] = 0; });
+
+  const memberCaps = app.memberCaps || {};
+
+  // Lấy mốc giới hạn kWh của từng người (nếu không khai báo thì mặc định = totalKwh)
+  const capsMap: Array<{ userId: string; cap: number }> = assignedIds.map(id => {
+    const rawCap = memberCaps[id];
+    const cap = rawCap !== undefined && rawCap !== null && rawCap > 0 ? Math.min(rawCap, totalKwh) : totalKwh;
+    return { userId: id, cap };
+  });
+
+  // Tìm các mốc kWh duy nhất tăng dần [0, t1, t2, ..., totalKwh]
+  const uniqueThresholds = Array.from(
+    new Set([0, ...capsMap.map(c => c.cap), totalKwh])
+  ).sort((a, b) => a - b);
+
+  // Chia khoảng [t_{j-1}, t_j]
+  for (let j = 1; j < uniqueThresholds.length; j++) {
+    const prevT = uniqueThresholds[j - 1];
+    const currT = uniqueThresholds[j];
+    const delta = currT - prevT;
+    if (delta <= 0) continue;
+
+    // Các thành viên còn sử dụng ở khoảng này (cap >= currT)
+    const activeMembers = capsMap.filter(c => c.cap >= currT);
+    const activeCount = activeMembers.length;
+
+    if (activeCount > 0) {
+      const sharePerActive = delta / activeCount;
+      activeMembers.forEach(m => {
+        result[m.userId] = (result[m.userId] || 0) + sharePerActive;
+      });
+    }
+  }
+
+  return result;
+}
+
+// ----------------------------------------------------
 // CÔNG CỤ TÍNH TOÁN CHI PHÍ CĂN HỘ TỔNG THỂ (CALCULATION ENGINE)
 // ----------------------------------------------------
 export function calculateApartmentExpenses(
@@ -174,12 +227,13 @@ export function calculateApartmentExpenses(
     const activeDays = member.activeDaysInMonth > 0 ? member.activeDaysInMonth : 30;
     const waterShare = (totalWaterCost * activeDays) / totalActiveDays;
 
-    // e. Tiền điện thiết bị đặc thù
+    // e. Tiền điện thiết bị đặc thù (Tính theo mốc kWh dừng sử dụng nếu có)
     let applianceElectricityShare = 0;
     appliances.forEach(app => {
       if (app.assignedUserIds.includes(member.userId) && app.assignedUserIds.length > 0) {
-        const appCost = app.kwhConsumed * effectiveKwhPrice;
-        applianceElectricityShare += appCost / app.assignedUserIds.length;
+        const splitMap = calculateApplianceKwhSplit(app);
+        const kwhForMember = splitMap[member.userId] || 0;
+        applianceElectricityShare += kwhForMember * effectiveKwhPrice;
       }
     });
 
@@ -339,4 +393,178 @@ export function getStoredSpecialAppliances(groupId: string): SpecialAppliance[] 
 
 export function saveSpecialAppliances(groupId: string, appliances: SpecialAppliance[]): void {
   localStorage.setItem(`${STORAGE_PREFIX}appliances_${groupId}`, JSON.stringify(appliances));
+}
+
+// ----------------------------------------------------
+// DỒNG BỘ DỮ LIỆU HAI CHIỀU VỚI SUPABASE DATABASE
+// ----------------------------------------------------
+
+export async function fetchApartmentConfigFromDb(groupId: string): Promise<ApartmentConfig | null> {
+  try {
+    const { data, error } = await supabase
+      .from('apartment_configs')
+      .select('*')
+      .eq('group_id', groupId)
+      .maybeSingle();
+
+    if (error || !data) return getStoredApartmentConfig(groupId);
+
+    const config: ApartmentConfig = {
+      groupId: data.group_id,
+      totalAreaM2: Number(data.total_area_m2),
+      managementFeePerM2: Number(data.management_fee_per_m2),
+      waterFeePerM3: Number(data.water_fee_per_m3),
+      waterTotalM3: Number(data.water_total_m3),
+      electricityPricingMode: data.electricity_pricing_mode,
+      electricityFeePerKwh: Number(data.electricity_fee_per_kwh),
+      electricityTotalKwh: Number(data.electricity_total_kwh),
+      vatPercentage: Number(data.vat_percentage),
+      parkingFeePerVehicle: Number(data.parking_fee_per_vehicle),
+      apartmentRent: Number(data.apartment_rent),
+      billingMonth: data.billing_month,
+    };
+    saveApartmentConfig(config); // Cache locally
+    return config;
+  } catch (err) {
+    console.warn('Could not fetch apartment config from Supabase, using local fallback:', err);
+    return getStoredApartmentConfig(groupId);
+  }
+}
+
+export async function saveApartmentConfigToDb(config: ApartmentConfig): Promise<void> {
+  saveApartmentConfig(config); // Local first
+  try {
+    await supabase.from('apartment_configs').upsert({
+      group_id: config.groupId,
+      total_area_m2: config.totalAreaM2,
+      management_fee_per_m2: config.managementFeePerM2,
+      water_fee_per_m3: config.waterFeePerM3,
+      water_total_m3: config.waterTotalM3,
+      electricity_pricing_mode: config.electricityPricingMode,
+      electricity_fee_per_kwh: config.electricityFeePerKwh,
+      electricity_total_kwh: config.electricityTotalKwh,
+      vat_percentage: config.vatPercentage,
+      parking_fee_per_vehicle: config.parkingFeePerVehicle,
+      apartment_rent: config.apartmentRent,
+      billing_month: config.billingMonth,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'group_id' });
+  } catch (err) {
+    console.warn('Could not save apartment config to Supabase:', err);
+  }
+}
+
+export async function fetchSpaceAllocationsFromDb(
+  groupId: string,
+  defaultMembers: Array<{ userId: string; name: string; avatarUrl?: string }>
+): Promise<MemberSpaceAllocation[]> {
+  try {
+    const { data, error } = await supabase
+      .from('member_space_allocations')
+      .select('*')
+      .eq('group_id', groupId);
+
+    if (error || !data || data.length === 0) return getStoredSpaceAllocations(groupId, defaultMembers);
+
+    const allocations: MemberSpaceAllocation[] = defaultMembers.map(dm => {
+      const existing = data.find((row: any) => row.user_id === dm.userId);
+      if (existing) {
+        return {
+          userId: dm.userId,
+          memberName: dm.name,
+          avatarUrl: dm.avatarUrl,
+          livingRoomM2: Number(existing.living_room_m2),
+          bedroomM2: Number(existing.bedroom_m2),
+          bathroomM2: Number(existing.bathroom_m2),
+          activeDaysInMonth: Number(existing.active_days_in_month),
+          customElectricityKwh: existing.custom_electricity_kwh !== null ? Number(existing.custom_electricity_kwh) : null,
+          vehiclesCount: Number(existing.vehicles_count),
+          includeParkingFee: existing.include_parking_fee !== false
+        };
+      }
+      return {
+        userId: dm.userId,
+        memberName: dm.name,
+        avatarUrl: dm.avatarUrl,
+        livingRoomM2: 25,
+        bedroomM2: 15,
+        bathroomM2: 6,
+        activeDaysInMonth: 30,
+        customElectricityKwh: null,
+        vehiclesCount: 1,
+        includeParkingFee: true
+      };
+    });
+
+    saveSpaceAllocations(groupId, allocations);
+    return allocations;
+  } catch (err) {
+    console.warn('Could not fetch space allocations from Supabase, using local fallback:', err);
+    return getStoredSpaceAllocations(groupId, defaultMembers);
+  }
+}
+
+export async function saveSpaceAllocationsToDb(groupId: string, allocations: MemberSpaceAllocation[]): Promise<void> {
+  saveSpaceAllocations(groupId, allocations);
+  try {
+    const rows = allocations.map(a => ({
+      group_id: groupId,
+      user_id: a.userId,
+      living_room_m2: a.livingRoomM2,
+      bedroom_m2: a.bedroomM2,
+      bathroom_m2: a.bathroomM2,
+      active_days_in_month: a.activeDaysInMonth,
+      custom_electricity_kwh: a.customElectricityKwh,
+      vehicles_count: a.vehiclesCount,
+      include_parking_fee: a.includeParkingFee !== false,
+      updated_at: new Date().toISOString()
+    }));
+    await supabase.from('member_space_allocations').upsert(rows, { onConflict: 'group_id,user_id' });
+  } catch (err) {
+    console.warn('Could not save space allocations to Supabase:', err);
+  }
+}
+
+export async function fetchSpecialAppliancesFromDb(groupId: string): Promise<SpecialAppliance[]> {
+  try {
+    const { data, error } = await supabase
+      .from('special_appliances')
+      .select('*')
+      .eq('group_id', groupId);
+
+    if (error || !data || data.length === 0) return getStoredSpecialAppliances(groupId);
+
+    const appliances: SpecialAppliance[] = data.map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      kwhConsumed: Number(row.kwh_consumed),
+      assignedUserIds: Array.isArray(row.assigned_user_ids) ? row.assigned_user_ids : [],
+      memberCaps: row.member_caps || {}
+    }));
+
+    saveSpecialAppliances(groupId, appliances);
+    return appliances;
+  } catch (err) {
+    console.warn('Could not fetch special appliances from Supabase, using local fallback:', err);
+    return getStoredSpecialAppliances(groupId);
+  }
+}
+
+export async function saveSpecialAppliancesToDb(groupId: string, appliances: SpecialAppliance[]): Promise<void> {
+  saveSpecialAppliances(groupId, appliances);
+  try {
+    // Delete missing items and upsert active items
+    const rows = appliances.map(a => ({
+      id: a.id.startsWith('app-') ? undefined : a.id,
+      group_id: groupId,
+      name: a.name,
+      kwh_consumed: a.kwhConsumed,
+      assigned_user_ids: a.assignedUserIds,
+      member_caps: a.memberCaps || {},
+      updated_at: new Date().toISOString()
+    }));
+    await supabase.from('special_appliances').upsert(rows);
+  } catch (err) {
+    console.warn('Could not save special appliances to Supabase:', err);
+  }
 }
