@@ -519,7 +519,13 @@ export function ApartmentExpenseManager() {
                               {formatVNNumber(item.allocatedAreaM2)}m² ({formatVNNumber(areaPercent, 1)}% căn hộ)
                             </span>
                             <span>•</span>
-                            <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 rounded-md">{item.activeDays} ngày ở</span>
+                            <span className={`px-2 py-0.5 rounded-md font-semibold ${
+                              item.activeDays === 0
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                : 'bg-emerald-500/20 text-emerald-300'
+                            }`}>
+                              {item.activeDays > 0 ? `${item.activeDays} ngày ở` : '0 ngày ở (Về quê)'}
+                            </span>
                           </div>
                         </div>
                       </div>

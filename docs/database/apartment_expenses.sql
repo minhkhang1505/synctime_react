@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS public.member_space_allocations (
     living_room_m2 NUMERIC(10,2) NOT NULL DEFAULT 25.00 CHECK (living_room_m2 >= 0),
     bedroom_m2 NUMERIC(10,2) NOT NULL DEFAULT 15.00 CHECK (bedroom_m2 >= 0),
     bathroom_m2 NUMERIC(10,2) NOT NULL DEFAULT 6.00 CHECK (bathroom_m2 >= 0),
-    active_days_in_month INT NOT NULL DEFAULT 30 CHECK (active_days_in_month BETWEEN 1 AND 31),
+    active_days_in_month INT NOT NULL DEFAULT 30 CHECK (active_days_in_month BETWEEN 0 AND 31),
     custom_electricity_kwh NUMERIC(10,2) DEFAULT NULL CHECK (custom_electricity_kwh IS NULL OR custom_electricity_kwh >= 0),
     vehicles_count INT NOT NULL DEFAULT 1 CHECK (vehicles_count >= 0),
     include_parking_fee BOOLEAN NOT NULL DEFAULT TRUE,

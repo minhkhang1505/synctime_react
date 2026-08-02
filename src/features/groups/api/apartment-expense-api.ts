@@ -224,8 +224,8 @@ export function calculateApartmentExpenses(
     const managementFeeShare = allocatedAreaM2 * config.managementFeePerM2;
 
     // d. Tiền nước theo tỷ lệ số ngày ở trong tháng
-    const activeDays = member.activeDaysInMonth > 0 ? member.activeDaysInMonth : 30;
-    const waterShare = (totalWaterCost * activeDays) / totalActiveDays;
+    const activeDays = member.activeDaysInMonth !== undefined && member.activeDaysInMonth !== null ? Math.max(0, member.activeDaysInMonth) : 30;
+    const waterShare = activeDays > 0 ? (totalWaterCost * activeDays) / totalActiveDays : 0;
 
     // e. Tiền điện thiết bị đặc thù (Tính theo mốc kWh dừng sử dụng nếu có)
     let applianceElectricityShare = 0;
