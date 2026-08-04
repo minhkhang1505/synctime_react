@@ -217,11 +217,14 @@ export function ApartmentExpenseManager() {
     toast.success('Đã lưu danh sách thiết bị điện lên hệ thống!');
   };
 
-  const handleToggleMemberParking = (targetUserId: string) => {
+  const handleToggleExpenseItem = (
+    targetUserId: string,
+    expenseKey: 'includeRent' | 'includeManagementFee' | 'includeWater' | 'includeElectricity' | 'includeParkingFee'
+  ) => {
     const updated = allocations.map(a => {
       if (a.userId === targetUserId) {
-        const currentVal = a.includeParkingFee !== false;
-        return { ...a, includeParkingFee: !currentVal };
+        const currentVal = a[expenseKey] !== false;
+        return { ...a, [expenseKey]: !currentVal };
       }
       return a;
     });
@@ -239,7 +242,7 @@ export function ApartmentExpenseManager() {
     setEditingApplianceId(null);
     setApplianceName('');
     setApplianceKwh(50);
-    setApplianceUsers(defaultMemberList.map(m => m.userId)); // default all assigned
+    setApplianceUsers(defaultMemberList.map(m => m.userId));
     setApplianceMemberCaps({});
     setIsApplianceModalOpen(true);
   };
@@ -299,24 +302,20 @@ export function ApartmentExpenseManager() {
     text += `------------------------------------\n`;
     text += `▪ Tổng diện tích căn hộ: ${formatVNNumber(config.totalAreaM2)} m²\n`;
     text += `▪ Tiền thuê căn hộ: ${formatVND(config.apartmentRent)}\n`;
-    text += `▪ Phí quản lý (${formatVNNumber(config.totalAreaM2)}m²): ${formatVND(report.totalManagementCost)}\n`;
-    text += `▪ Tiền điện (${formatVNNumber(config.electricityTotalKwh)} kWh): ${formatVND(report.totalElectricityCostWithVat)}\n`;
-    text += `▪ Tiền nước (${formatVNNumber(config.waterTotalM3)} m³): ${formatVND(report.totalWaterCost)}\n`;
+    text += `▪ Phí quản lý: ${formatVND(report.totalManagementCost)} (${formatVND(config.managementFeePerM2)}/m²)\n`;
+    text += `▪ Tổng tiền điện: ${formatVND(report.totalElectricityCostWithVat)} (${formatVNNumber(config.electricityTotalKwh)} kWh ~ ${Math.round(report.effectiveKwhPrice).toLocaleString('vi-VN')}đ/kWh)\n`;
+    text += `▪ Tổng tiền nước: ${formatVND(report.totalWaterCost)} (${formatVNNumber(config.waterTotalM3)} m³ | VAT ${formatVNNumber(config.waterVatPercentage ?? 5)}% + BVMT ${formatVNNumber(config.waterBvmtPercentage ?? 10)}%)\n`;
     text += `------------------------------------\n`;
-    text += `📊 *TỔNG THU THEO THÀNH VIÊN:*\n\n`;
+    text += `📋 *CHI TIẾT THANH TOÁN TỪNG THÀNH VIÊN:*\n\n`;
 
     report.breakdowns.forEach((b, idx) => {
       const areaPercent = config.totalAreaM2 > 0 ? (b.allocatedAreaM2 / config.totalAreaM2) * 100 : 0;
       text += `${idx + 1}. *${b.memberName}* (${formatVNNumber(b.allocatedAreaM2)} m² ~ ${formatVNNumber(areaPercent, 1)}% căn hộ | ${b.activeDays} ngày ở):\n`;
-      text += `   - Tiền nhà (${formatVNNumber(areaPercent, 1)}%): ${formatVND(b.rentShare)}\n`;
-      text += `   - Phí quản lý (${formatVNNumber(b.allocatedAreaM2)}m²): ${formatVND(b.managementFeeShare)}\n`;
-      text += `   - Tiền điện: ${formatVND(b.totalElectricityShare)} (Chung: ${formatVND(b.sharedElectricityShare)}${b.applianceElectricityShare > 0 ? ` + TB riêng: ${formatVND(b.applianceElectricityShare)}` : ''})\n`;
-      text += `   - Tiền nước: ${formatVND(b.waterShare)}\n`;
-      if (b.includeParkingFee && b.parkingShare > 0) {
-        text += `   - Phí gửi xe: ${formatVND(b.parkingShare)}\n`;
-      } else if (!b.includeParkingFee) {
-        text += `   - Phí gửi xe: 0 đ (Tắt / Thanh toán riêng)\n`;
-      }
+      text += `   - Tiền nhà (${formatVNNumber(areaPercent, 1)}%): ${b.includeRent ? formatVND(b.rentShare) : '0 đ (Tắt)'}\n`;
+      text += `   - Phí quản lý (${formatVNNumber(b.allocatedAreaM2)}m²): ${b.includeManagementFee ? formatVND(b.managementFeeShare) : '0 đ (Tắt)'}\n`;
+      text += `   - Tiền điện: ${b.includeElectricity ? `${formatVND(b.totalElectricityShare)} (Chung: ${formatVND(b.sharedElectricityShare)}${b.applianceElectricityShare > 0 ? ` + TB riêng: ${formatVND(b.applianceElectricityShare)}` : ''})` : '0 đ (Tắt)'}\n`;
+      text += `   - Tiền nước: ${b.includeWater ? formatVND(b.waterShare) : '0 đ (Tắt)'}\n`;
+      text += `   - Phí gửi xe: ${b.includeParkingFee ? formatVND(b.parkingShare) : '0 đ (Tắt)'}\n`;
       text += `   👉 *TỔNG CỘNG: ${formatVND(b.grandTotal)}*\n\n`;
     });
 
@@ -533,63 +532,141 @@ export function ApartmentExpenseManager() {
 
                     {/* Expense Items Breakdown */}
                     <div className="space-y-3 text-xs md:text-sm">
+                      {/* Tiền thuê nhà */}
                       <div className="flex justify-between items-start text-gray-300">
                         <div>
-                          <span className="text-gray-400 block">Tiền thuê nhà (theo m²):</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-400 font-medium">Tiền thuê nhà (theo m²):</span>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleExpenseItem(item.userId, 'includeRent')}
+                              className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                item.includeRent ? 'bg-purple-500' : 'bg-gray-600'
+                              }`}
+                              title={item.includeRent ? 'Đang bật tiền nhà' : 'Đã tắt tiền nhà'}
+                            >
+                              <span
+                                className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                  item.includeRent ? 'translate-x-3' : 'translate-x-0'
+                                }`}
+                              />
+                            </button>
+                          </div>
                           <span className="text-[11px] text-gray-500 font-mono">Tỷ lệ {formatVNNumber(areaPercent, 1)}% căn hộ</span>
                         </div>
-                        <span className="font-bold text-white">{formatVND(item.rentShare)}</span>
+                        <span className={`font-bold ${item.includeRent ? 'text-white' : 'text-gray-500 line-through'}`}>
+                          {item.includeRent ? formatVND(item.rentShare) : '0 đ'}
+                        </span>
                       </div>
 
+                      {/* Phí quản lý */}
                       <div className="flex justify-between items-start text-gray-300">
                         <div>
-                          <span className="text-gray-400 block">Phí quản lý căn hộ:</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-400 font-medium">Phí quản lý căn hộ:</span>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleExpenseItem(item.userId, 'includeManagementFee')}
+                              className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                item.includeManagementFee ? 'bg-blue-500' : 'bg-gray-600'
+                              }`}
+                              title={item.includeManagementFee ? 'Đang bật phí quản lý' : 'Đã tắt phí quản lý'}
+                            >
+                              <span
+                                className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                  item.includeManagementFee ? 'translate-x-3' : 'translate-x-0'
+                                }`}
+                              />
+                            </button>
+                          </div>
                           <span className="text-[11px] text-gray-500 font-mono">{formatVNNumber(item.allocatedAreaM2)}m² x {formatVND(config.managementFeePerM2)}/m²</span>
                         </div>
-                        <span className="font-bold text-white">{formatVND(item.managementFeeShare)}</span>
+                        <span className={`font-bold ${item.includeManagementFee ? 'text-white' : 'text-gray-500 line-through'}`}>
+                          {item.includeManagementFee ? formatVND(item.managementFeeShare) : '0 đ'}
+                        </span>
                       </div>
 
+                      {/* Tiền nước */}
                       <div className="flex justify-between items-center text-gray-300">
-                        <span className="text-gray-400">Tiền nước ({item.activeDays} ngày ở):</span>
-                        <span className="font-semibold text-cyan-300">{formatVND(item.waterShare)}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-400 font-medium">Tiền nước ({item.activeDays}d):</span>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleExpenseItem(item.userId, 'includeWater')}
+                            className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              item.includeWater ? 'bg-cyan-500' : 'bg-gray-600'
+                            }`}
+                            title={item.includeWater ? 'Đang bật tiền nước' : 'Đã tắt tiền nước'}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                item.includeWater ? 'translate-x-3' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                        <span className={`font-semibold ${item.includeWater ? 'text-cyan-300' : 'text-gray-500 line-through'}`}>
+                          {item.includeWater ? formatVND(item.waterShare) : '0 đ'}
+                        </span>
                       </div>
 
+                      {/* Tiền điện */}
                       <div className="bg-black/20 p-3 rounded-2xl border border-white/5 space-y-1.5">
                         <div className="flex justify-between items-center">
-                          <span className="font-bold text-amber-400 flex items-center gap-1.5">
-                            <Zap size={14} /> Tiền điện tổng:
-                          </span>
-                          <span className="font-bold text-amber-400">{formatVND(item.totalElectricityShare)}</span>
-                        </div>
-                        <div className="text-[11px] text-gray-400 pl-4 space-y-0.5">
-                          <div className="flex justify-between">
-                            <span>• Điện dùng chung ({item.activeDays}d):</span>
-                            <span>{formatVND(item.sharedElectricityShare)}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-amber-400 flex items-center gap-1.5">
+                              <Zap size={14} /> Tiền điện tổng:
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleExpenseItem(item.userId, 'includeElectricity')}
+                              className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                item.includeElectricity ? 'bg-amber-500' : 'bg-gray-600'
+                              }`}
+                              title={item.includeElectricity ? 'Đang bật tiền điện' : 'Đã tắt tiền điện'}
+                            >
+                              <span
+                                className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                  item.includeElectricity ? 'translate-x-3' : 'translate-x-0'
+                                }`}
+                              />
+                            </button>
                           </div>
-                          {item.applianceElectricityShare > 0 && (
-                            <div className="flex justify-between text-purple-300">
-                              <span>• Thiết bị điện đặc thù:</span>
-                              <span>{formatVND(item.applianceElectricityShare)}</span>
-                            </div>
-                          )}
+                          <span className={`font-bold ${item.includeElectricity ? 'text-amber-400' : 'text-gray-500 line-through'}`}>
+                            {item.includeElectricity ? formatVND(item.totalElectricityShare) : '0 đ'}
+                          </span>
                         </div>
+                        {item.includeElectricity && (
+                          <div className="text-[11px] text-gray-400 pl-4 space-y-0.5">
+                            <div className="flex justify-between">
+                              <span>• Điện dùng chung ({item.activeDays}d):</span>
+                              <span>{formatVND(item.sharedElectricityShare)}</span>
+                            </div>
+                            {item.applianceElectricityShare > 0 && (
+                              <div className="flex justify-between text-purple-300">
+                                <span>• Thiết bị điện đặc thù:</span>
+                                <span>{formatVND(item.applianceElectricityShare)}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
 
-                      {/* Parking Fee Toggle Switch Row */}
+                      {/* Phí giữ xe */}
                       <div className="flex justify-between items-center text-gray-300 pt-1">
                         <div className="flex items-center gap-2">
                           <span className="text-gray-400">Phí giữ xe:</span>
                           <button
                             type="button"
-                            onClick={() => handleToggleMemberParking(item.userId)}
-                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            onClick={() => handleToggleExpenseItem(item.userId, 'includeParkingFee')}
+                            className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                               item.includeParkingFee ? 'bg-emerald-500' : 'bg-gray-600'
                             }`}
-                            title={item.includeParkingFee ? 'Đang cộng phí xe vào tổng hoá đơn' : 'Đã tắt cộng phí xe vào hóa đơn'}
+                            title={item.includeParkingFee ? 'Đang bật phí gửi xe' : 'Đã tắt phí gửi xe'}
                           >
                             <span
-                              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                item.includeParkingFee ? 'translate-x-4' : 'translate-x-0'
+                              className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                item.includeParkingFee ? 'translate-x-3' : 'translate-x-0'
                               }`}
                             />
                           </button>
@@ -668,6 +745,24 @@ export function ApartmentExpenseManager() {
                 <FormattedNumberInput
                   value={config.waterTotalM3}
                   onChange={val => setConfig({ ...config, waterTotalM3: val })}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white font-bold text-sm focus:outline-none focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1">Thuế VAT nước (%)</label>
+                <FormattedNumberInput
+                  value={config.waterVatPercentage ?? 5}
+                  onChange={val => setConfig({ ...config, waterVatPercentage: val })}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white font-bold text-sm focus:outline-none focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1">Phí Bảo vệ môi trường - BVMT (%)</label>
+                <FormattedNumberInput
+                  value={config.waterBvmtPercentage ?? 10}
+                  onChange={val => setConfig({ ...config, waterBvmtPercentage: val })}
                   className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white font-bold text-sm focus:outline-none focus:border-primary"
                 />
               </div>

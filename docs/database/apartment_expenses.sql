@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS public.apartment_configs (
     management_fee_per_m2 NUMERIC(12,2) NOT NULL DEFAULT 12000.00 CHECK (management_fee_per_m2 >= 0),
     water_fee_per_m3 NUMERIC(12,2) NOT NULL DEFAULT 18000.00 CHECK (water_fee_per_m3 >= 0),
     water_total_m3 NUMERIC(10,2) NOT NULL DEFAULT 15.00 CHECK (water_total_m3 >= 0),
+    water_vat_percentage NUMERIC(5,2) NOT NULL DEFAULT 5.00 CHECK (water_vat_percentage >= 0),
+    water_bvmt_percentage NUMERIC(5,2) NOT NULL DEFAULT 10.00 CHECK (water_bvmt_percentage >= 0),
     electricity_pricing_mode VARCHAR(30) NOT NULL DEFAULT 'evn_progressive' CHECK (electricity_pricing_mode IN ('evn_progressive', 'flat_rate')),
     electricity_fee_per_kwh NUMERIC(12,2) NOT NULL DEFAULT 2500.00 CHECK (electricity_fee_per_kwh >= 0),
     electricity_total_kwh NUMERIC(10,2) NOT NULL DEFAULT 350.00 CHECK (electricity_total_kwh >= 0),
@@ -32,6 +34,10 @@ CREATE TABLE IF NOT EXISTS public.member_space_allocations (
     active_days_in_month INT NOT NULL DEFAULT 30 CHECK (active_days_in_month BETWEEN 0 AND 31),
     custom_electricity_kwh NUMERIC(10,2) DEFAULT NULL CHECK (custom_electricity_kwh IS NULL OR custom_electricity_kwh >= 0),
     vehicles_count INT NOT NULL DEFAULT 1 CHECK (vehicles_count >= 0),
+    include_rent BOOLEAN NOT NULL DEFAULT TRUE,
+    include_management_fee BOOLEAN NOT NULL DEFAULT TRUE,
+    include_water BOOLEAN NOT NULL DEFAULT TRUE,
+    include_electricity BOOLEAN NOT NULL DEFAULT TRUE,
     include_parking_fee BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
@@ -53,9 +59,29 @@ CREATE TABLE IF NOT EXISTS public.special_appliances (
 -- 4. Bổ sung cột nếu bảng đã tồn tại sẵn
 DO $$ 
 BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='apartment_configs' AND column_name='water_vat_percentage') THEN
+        ALTER TABLE public.apartment_configs ADD COLUMN water_vat_percentage NUMERIC(5,2) NOT NULL DEFAULT 5.00;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='apartment_configs' AND column_name='water_bvmt_percentage') THEN
+        ALTER TABLE public.apartment_configs ADD COLUMN water_bvmt_percentage NUMERIC(5,2) NOT NULL DEFAULT 10.00;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='member_space_allocations' AND column_name='include_rent') THEN
+        ALTER TABLE public.member_space_allocations ADD COLUMN include_rent BOOLEAN NOT NULL DEFAULT TRUE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='member_space_allocations' AND column_name='include_management_fee') THEN
+        ALTER TABLE public.member_space_allocations ADD COLUMN include_management_fee BOOLEAN NOT NULL DEFAULT TRUE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='member_space_allocations' AND column_name='include_water') THEN
+        ALTER TABLE public.member_space_allocations ADD COLUMN include_water BOOLEAN NOT NULL DEFAULT TRUE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='member_space_allocations' AND column_name='include_electricity') THEN
+        ALTER TABLE public.member_space_allocations ADD COLUMN include_electricity BOOLEAN NOT NULL DEFAULT TRUE;
+    END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='member_space_allocations' AND column_name='include_parking_fee') THEN
         ALTER TABLE public.member_space_allocations ADD COLUMN include_parking_fee BOOLEAN NOT NULL DEFAULT TRUE;
     END IF;
+
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='special_appliances' AND column_name='member_caps') THEN
         ALTER TABLE public.special_appliances ADD COLUMN member_caps JSONB NOT NULL DEFAULT '{}'::jsonb;
     END IF;

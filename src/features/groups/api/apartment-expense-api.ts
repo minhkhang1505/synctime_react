@@ -24,10 +24,12 @@ export interface ApartmentConfig {
   managementFeePerM2: number; // Phí quản lý / m2
   waterFeePerM3: number; // Phí nước / m3
   waterTotalM3: number; // Tổng m3 nước tiêu thụ
+  waterVatPercentage: number; // Thuế VAT nước % (mặc định 5%)
+  waterBvmtPercentage: number; // Phí bảo vệ môi trường % (mặc định 10%)
   electricityPricingMode: 'evn_progressive' | 'flat_rate';
   electricityFeePerKwh: number; // Nếu dùng flat rate
   electricityTotalKwh: number; // Tổng số kWh điện cả căn hộ
-  vatPercentage: number; // VAT % (mặc định 8%)
+  vatPercentage: number; // VAT điện % (mặc định 8%)
   parkingFeePerVehicle: number; // Phí gửi 1 xe
   apartmentRent: number; // Tiền thuê căn hộ / tháng
   billingMonth: string; // Thống kê tháng YYYY-MM
@@ -43,7 +45,11 @@ export interface MemberSpaceAllocation {
   activeDaysInMonth: number; // Số ngày ở trong tháng (mặc định 30)
   customElectricityKwh: number | null; // Số kWh riêng (nếu có công tơ phụ)
   vehiclesCount: number; // Số lượng xe gửi
-  includeParkingFee?: boolean; // Bật/Tắt tính phí gửi xe vào hóa đơn (mặc định true)
+  includeRent?: boolean; // Bật/Tắt tính tiền thuê nhà (mặc định true)
+  includeManagementFee?: boolean; // Bật/Tắt tính phí quản lý (mặc định true)
+  includeWater?: boolean; // Bật/Tắt tính tiền nước (mặc định true)
+  includeElectricity?: boolean; // Bật/Tắt tính tiền điện (mặc định true)
+  includeParkingFee?: boolean; // Bật/Tắt tính phí gửi xe (mặc định true)
 }
 
 export interface SpecialAppliance {
@@ -67,7 +73,11 @@ export interface MemberExpenseBreakdown {
   sharedElectricityShare: number; // Tiền điện dùng chung (theo số ngày ở)
   totalElectricityShare: number; // Tổng tiền điện
   parkingShare: number; // Phí gửi xe
-  includeParkingFee: boolean; // Trạng thái bật/tắt cộng phí gửi xe vào hóa đơn
+  includeRent: boolean;
+  includeManagementFee: boolean;
+  includeWater: boolean;
+  includeElectricity: boolean;
+  includeParkingFee: boolean;
   grandTotal: number; // Tổng cộng phải trả
 }
 
@@ -77,7 +87,10 @@ export interface ApartmentExpenseReport {
   sharedKwh: number;
   totalElectricityCostWithVat: number;
   effectiveKwhPrice: number; // Đơn giá điện trung bình thực tế / kWh
-  totalWaterCost: number;
+  totalWaterCostBeforeTax: number; // Tiền nước trước thuế & phí
+  waterVatAmount: number; // Thuế VAT nước
+  waterBvmtAmount: number; // Phí bảo vệ môi trường nước
+  totalWaterCost: number; // Tổng tiền nước sau VAT & BVMT
   totalManagementCost: number;
   autoLivingRoomM2: number; // Diện tích phòng khách / dùng chung (tự động = Tổng diện tích - Tổng diện tích riêng)
   sharedLivingRoomPerMember: number; // Diện tích dùng chung chia cho từng người
@@ -200,8 +213,15 @@ export function calculateApartmentExpenses(
   // 3. Tính tổng số ngày ở của tất cả thành viên
   const totalActiveDays = members.reduce((sum, m) => sum + (m.activeDaysInMonth || 0), 0) || 1;
 
-  // 4. Tổng nước & Phí quản lý căn hộ
-  const totalWaterCost = config.waterTotalM3 * config.waterFeePerM3;
+  // 4. Tổng nước (Tiền nước trước thuế + VAT Nước + Phí BVMT) & Phí quản lý căn hộ
+  const waterVatPct = config.waterVatPercentage !== undefined ? config.waterVatPercentage : 5;
+  const waterBvmtPct = config.waterBvmtPercentage !== undefined ? config.waterBvmtPercentage : 10;
+
+  const totalWaterCostBeforeTax = config.waterTotalM3 * config.waterFeePerM3;
+  const waterVatAmount = (totalWaterCostBeforeTax * waterVatPct) / 100;
+  const waterBvmtAmount = (totalWaterCostBeforeTax * waterBvmtPct) / 100;
+  const totalWaterCost = totalWaterCostBeforeTax + waterVatAmount + waterBvmtAmount;
+
   const totalManagementCost = config.totalAreaM2 * config.managementFeePerM2;
 
   // 5. Tự động tính diện tích dùng chung (Phòng khách = Tổng diện tích căn hộ - Tổng diện tích riêng)
@@ -211,45 +231,58 @@ export function calculateApartmentExpenses(
 
   // 6. Tính toán chi tiết cho từng thành viên
   const breakdowns: MemberExpenseBreakdown[] = members.map(member => {
+    // Trạng thái bật/tắt từng khoản phí của thành viên (mặc định true)
+    const includeRent = member.includeRent !== false;
+    const includeManagementFee = member.includeManagementFee !== false;
+    const includeWater = member.includeWater !== false;
+    const includeElectricity = member.includeElectricity !== false;
+    const includeParkingFee = member.includeParkingFee !== false;
+
     // a. Diện tích quy đổi cá nhân = Diện tích phòng riêng + (Diện tích dùng chung tự động / số người)
     const privateArea = (member.bedroomM2 || 0) + (member.bathroomM2 || 0);
     const allocatedAreaM2 = privateArea + sharedLivingRoomPerMember;
 
     // b. Tiền thuê nhà theo tỷ lệ diện tích quy đổi
-    const rentShare = config.totalAreaM2 > 0
+    const rawRentShare = config.totalAreaM2 > 0
       ? (config.apartmentRent * allocatedAreaM2) / config.totalAreaM2
       : config.apartmentRent / memberCount;
+    const rentShare = includeRent ? rawRentShare : 0;
 
     // c. Phí quản lý
-    const managementFeeShare = allocatedAreaM2 * config.managementFeePerM2;
+    const rawManagementFeeShare = allocatedAreaM2 * config.managementFeePerM2;
+    const managementFeeShare = includeManagementFee ? rawManagementFeeShare : 0;
 
     // d. Tiền nước theo tỷ lệ số ngày ở trong tháng
     const activeDays = member.activeDaysInMonth !== undefined && member.activeDaysInMonth !== null ? Math.max(0, member.activeDaysInMonth) : 30;
-    const waterShare = activeDays > 0 ? (totalWaterCost * activeDays) / totalActiveDays : 0;
+    const rawWaterShare = activeDays > 0 ? (totalWaterCost * activeDays) / totalActiveDays : 0;
+    const waterShare = includeWater ? rawWaterShare : 0;
 
     // e. Tiền điện thiết bị đặc thù (Tính theo mốc kWh dừng sử dụng nếu có)
-    let applianceElectricityShare = 0;
+    let rawApplianceElectricityShare = 0;
     appliances.forEach(app => {
       if (app.assignedUserIds.includes(member.userId) && app.assignedUserIds.length > 0) {
         const splitMap = calculateApplianceKwhSplit(app);
         const kwhForMember = splitMap[member.userId] || 0;
-        applianceElectricityShare += kwhForMember * effectiveKwhPrice;
+        rawApplianceElectricityShare += kwhForMember * effectiveKwhPrice;
       }
     });
 
     // f. Tiền điện dùng chung (hoặc công tơ riêng)
-    let sharedElectricityShare = 0;
+    let rawSharedElectricityShare = 0;
     if (member.customElectricityKwh !== null && member.customElectricityKwh > 0) {
-      sharedElectricityShare = member.customElectricityKwh * effectiveKwhPrice;
+      rawSharedElectricityShare = member.customElectricityKwh * effectiveKwhPrice;
     } else {
-      sharedElectricityShare = (sharedKwh * effectiveKwhPrice * activeDays) / totalActiveDays;
+      rawSharedElectricityShare = (sharedKwh * effectiveKwhPrice * activeDays) / totalActiveDays;
     }
 
-    const totalElectricityShare = applianceElectricityShare + sharedElectricityShare;
+    const rawTotalElectricityShare = rawApplianceElectricityShare + rawSharedElectricityShare;
+    const totalElectricityShare = includeElectricity ? rawTotalElectricityShare : 0;
+    const applianceElectricityShare = includeElectricity ? rawApplianceElectricityShare : 0;
+    const sharedElectricityShare = includeElectricity ? rawSharedElectricityShare : 0;
 
-    // g. Phí gửi xe (Chỉ cộng vào hóa đơn nếu includeParkingFee !== false)
-    const includeParkingFee = member.includeParkingFee !== false;
-    const parkingShare = includeParkingFee ? member.vehiclesCount * config.parkingFeePerVehicle : 0;
+    // g. Phí gửi xe
+    const rawParkingShare = member.vehiclesCount * config.parkingFeePerVehicle;
+    const parkingShare = includeParkingFee ? rawParkingShare : 0;
 
     // h. Tổng tiền
     const grandTotal = rentShare + managementFeeShare + waterShare + totalElectricityShare + parkingShare;
@@ -267,6 +300,10 @@ export function calculateApartmentExpenses(
       sharedElectricityShare,
       totalElectricityShare,
       parkingShare,
+      includeRent,
+      includeManagementFee,
+      includeWater,
+      includeElectricity,
       includeParkingFee,
       grandTotal
     };
@@ -278,6 +315,9 @@ export function calculateApartmentExpenses(
     sharedKwh,
     totalElectricityCostWithVat,
     effectiveKwhPrice,
+    totalWaterCostBeforeTax,
+    waterVatAmount,
+    waterBvmtAmount,
     totalWaterCost,
     totalManagementCost,
     autoLivingRoomM2,
@@ -296,7 +336,12 @@ export function getStoredApartmentConfig(groupId: string): ApartmentConfig {
   const stored = localStorage.getItem(`${STORAGE_PREFIX}config_${groupId}`);
   if (stored) {
     try {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored);
+      return {
+        waterVatPercentage: 5,
+        waterBvmtPercentage: 10,
+        ...parsed
+      };
     } catch (e) {
       console.error('Error parsing stored config', e);
     }
@@ -307,6 +352,8 @@ export function getStoredApartmentConfig(groupId: string): ApartmentConfig {
     managementFeePerM2: 12000,
     waterFeePerM3: 18000,
     waterTotalM3: 15,
+    waterVatPercentage: 5,
+    waterBvmtPercentage: 10,
     electricityPricingMode: 'evn_progressive',
     electricityFeePerKwh: 2500,
     electricityTotalKwh: 350,
@@ -334,6 +381,10 @@ export function getStoredSpaceAllocations(groupId: string, defaultMembers: Array
             ...existing,
             memberName: dm.name,
             avatarUrl: dm.avatarUrl,
+            includeRent: existing.includeRent !== false,
+            includeManagementFee: existing.includeManagementFee !== false,
+            includeWater: existing.includeWater !== false,
+            includeElectricity: existing.includeElectricity !== false,
             includeParkingFee: existing.includeParkingFee !== false
           };
         }
@@ -347,6 +398,10 @@ export function getStoredSpaceAllocations(groupId: string, defaultMembers: Array
           activeDaysInMonth: 30,
           customElectricityKwh: null,
           vehiclesCount: 1,
+          includeRent: true,
+          includeManagementFee: true,
+          includeWater: true,
+          includeElectricity: true,
           includeParkingFee: true,
         };
       });
@@ -364,6 +419,10 @@ export function getStoredSpaceAllocations(groupId: string, defaultMembers: Array
     activeDaysInMonth: 30,
     customElectricityKwh: null,
     vehiclesCount: 1,
+    includeRent: true,
+    includeManagementFee: true,
+    includeWater: true,
+    includeElectricity: true,
     includeParkingFee: true,
   }));
 }
@@ -415,6 +474,8 @@ export async function fetchApartmentConfigFromDb(groupId: string): Promise<Apart
       managementFeePerM2: Number(data.management_fee_per_m2),
       waterFeePerM3: Number(data.water_fee_per_m3),
       waterTotalM3: Number(data.water_total_m3),
+      waterVatPercentage: data.water_vat_percentage !== undefined ? Number(data.water_vat_percentage) : 5,
+      waterBvmtPercentage: data.water_bvmt_percentage !== undefined ? Number(data.water_bvmt_percentage) : 10,
       electricityPricingMode: data.electricity_pricing_mode,
       electricityFeePerKwh: Number(data.electricity_fee_per_kwh),
       electricityTotalKwh: Number(data.electricity_total_kwh),
@@ -440,6 +501,8 @@ export async function saveApartmentConfigToDb(config: ApartmentConfig): Promise<
       management_fee_per_m2: config.managementFeePerM2,
       water_fee_per_m3: config.waterFeePerM3,
       water_total_m3: config.waterTotalM3,
+      water_vat_percentage: config.waterVatPercentage,
+      water_bvmt_percentage: config.waterBvmtPercentage,
       electricity_pricing_mode: config.electricityPricingMode,
       electricity_fee_per_kwh: config.electricityFeePerKwh,
       electricity_total_kwh: config.electricityTotalKwh,
@@ -479,6 +542,10 @@ export async function fetchSpaceAllocationsFromDb(
           activeDaysInMonth: Number(existing.active_days_in_month),
           customElectricityKwh: existing.custom_electricity_kwh !== null ? Number(existing.custom_electricity_kwh) : null,
           vehiclesCount: Number(existing.vehicles_count),
+          includeRent: existing.include_rent !== false,
+          includeManagementFee: existing.include_management_fee !== false,
+          includeWater: existing.include_water !== false,
+          includeElectricity: existing.include_electricity !== false,
           includeParkingFee: existing.include_parking_fee !== false
         };
       }
@@ -492,6 +559,10 @@ export async function fetchSpaceAllocationsFromDb(
         activeDaysInMonth: 30,
         customElectricityKwh: null,
         vehiclesCount: 1,
+        includeRent: true,
+        includeManagementFee: true,
+        includeWater: true,
+        includeElectricity: true,
         includeParkingFee: true
       };
     });
@@ -516,6 +587,10 @@ export async function saveSpaceAllocationsToDb(groupId: string, allocations: Mem
       active_days_in_month: a.activeDaysInMonth,
       custom_electricity_kwh: a.customElectricityKwh,
       vehicles_count: a.vehiclesCount,
+      include_rent: a.includeRent !== false,
+      include_management_fee: a.includeManagementFee !== false,
+      include_water: a.includeWater !== false,
+      include_electricity: a.includeElectricity !== false,
       include_parking_fee: a.includeParkingFee !== false,
       updated_at: new Date().toISOString()
     }));
