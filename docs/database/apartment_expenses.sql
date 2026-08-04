@@ -209,3 +209,30 @@ CREATE POLICY delete_special_appliances ON public.special_appliances
             AND public.group_members.user_id = auth.uid()
         )
     );
+
+-- 8. Chính sách RLS cho phép rời nhóm (DELETE trong group_members & member_space_allocations)
+ALTER TABLE public.group_members ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS delete_group_members ON public.group_members;
+CREATE POLICY delete_group_members ON public.group_members
+    FOR DELETE TO authenticated
+    USING (
+        user_id = auth.uid() 
+        OR EXISTS (
+            SELECT 1 FROM public.groups
+            WHERE public.groups.id = group_members.group_id
+            AND public.groups.created_by = auth.uid()
+        )
+    );
+
+DROP POLICY IF EXISTS delete_member_space_allocations ON public.member_space_allocations;
+CREATE POLICY delete_member_space_allocations ON public.member_space_allocations
+    FOR DELETE TO authenticated
+    USING (
+        user_id = auth.uid()
+        OR EXISTS (
+            SELECT 1 FROM public.group_members
+            WHERE public.group_members.group_id = member_space_allocations.group_id
+            AND public.group_members.user_id = auth.uid()
+        )
+    );

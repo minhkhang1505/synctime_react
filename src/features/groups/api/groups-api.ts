@@ -106,3 +106,28 @@ export async function deleteGroup(groupId: string): Promise<void> {
 
   if (error) throw error;
 }
+
+export async function leaveGroup(groupId: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Chưa đăng nhập');
+
+  // 1. Rời khỏi nhóm trong bảng group_members
+  const { error: leaveError } = await supabase
+    .from('group_members')
+    .delete()
+    .eq('group_id', groupId)
+    .eq('user_id', user.id);
+
+  if (leaveError) throw leaveError;
+
+  // 2. Xóa thông tin phân bổ diện tích cá nhân trong bảng member_space_allocations
+  try {
+    await supabase
+      .from('member_space_allocations')
+      .delete()
+      .eq('group_id', groupId)
+      .eq('user_id', user.id);
+  } catch (e) {
+    console.warn('Could not cleanup member space allocation on leave:', e);
+  }
+}

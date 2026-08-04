@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchGroupMembers, fetchUserGroups, deleteGroup } from '../features/groups/api/groups-api';
-import { ArrowLeft, Copy, Calendar as CalendarIcon, Users, Trash2, CreditCard, Calculator } from 'lucide-react';
+import { fetchGroupMembers, fetchUserGroups, deleteGroup, leaveGroup } from '../features/groups/api/groups-api';
+import { ArrowLeft, Copy, Calendar as CalendarIcon, Users, Trash2, CreditCard, Calculator, LogOut } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/useAuthStore';
@@ -35,6 +35,18 @@ export function GroupDetail() {
     },
     onError: (err: any) => {
       toast.error(err.message || 'Không thể xóa nhóm');
+    }
+  });
+
+  const leaveMutation = useMutation({
+    mutationFn: leaveGroup,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      toast.success('Bạn đã rời khỏi nhóm thành công!');
+      navigate('/groups');
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Không thể rời nhóm');
     }
   });
 
@@ -95,20 +107,35 @@ export function GroupDetail() {
             </Link>
           </div>
 
-          {isOwner && (
+          <div className="flex flex-col sm:flex-row gap-3">
             <button
               onClick={() => {
-                if (confirm('Bạn có chắc chắn muốn xóa nhóm này vĩnh viễn? Thao tác này không thể hoàn tác.')) {
-                  deleteMutation.mutate(group.id);
+                if (confirm(`Bạn có chắc chắn muốn rời khỏi nhóm "${group.name}"?`)) {
+                  leaveMutation.mutate(group.id);
                 }
               }}
-              disabled={deleteMutation.isPending}
-              className="w-full py-4 md:py-5 rounded-[20px] md:rounded-[40px] bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 text-red-400 font-bold text-sm md:text-lg flex items-center justify-center gap-2.5 transition-all shadow-xl active:scale-[0.98]"
+              disabled={leaveMutation.isPending}
+              className="flex-1 py-4 md:py-5 rounded-[20px] md:rounded-[40px] bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 hover:border-amber-500/40 text-amber-300 font-bold text-sm md:text-lg flex items-center justify-center gap-2.5 transition-all shadow-xl active:scale-[0.98]"
             >
-              <Trash2 size={20} className="md:w-6 md:h-6" />
-              {deleteMutation.isPending ? 'Đang xóa nhóm...' : 'Xóa Nhóm'}
+              <LogOut size={20} className="md:w-6 md:h-6" />
+              {leaveMutation.isPending ? 'Đang rời nhóm...' : 'Rời Nhóm'}
             </button>
-          )}
+
+            {isOwner && (
+              <button
+                onClick={() => {
+                  if (confirm('Bạn có chắc chắn muốn xóa nhóm này vĩnh viễn? Thao tác này không thể hoàn tác.')) {
+                    deleteMutation.mutate(group.id);
+                  }
+                }}
+                disabled={deleteMutation.isPending}
+                className="flex-1 py-4 md:py-5 rounded-[20px] md:rounded-[40px] bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 text-red-400 font-bold text-sm md:text-lg flex items-center justify-center gap-2.5 transition-all shadow-xl active:scale-[0.98]"
+              >
+                <Trash2 size={20} className="md:w-6 md:h-6" />
+                {deleteMutation.isPending ? 'Đang xóa nhóm...' : 'Xóa Nhóm'}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Right Column: Members */}
